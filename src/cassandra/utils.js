@@ -7,20 +7,13 @@ var valid_space = /^[\w]+$/;
 
 var logger = require('logger').get('cassandra-utils');
 
-var cassandra_client, communicator, isMaster, prepareds;
+var cassandra_client, prepareds;
 
 var pendingTables = {};
 
-function init(cass_client, communication_device, master, preparedQueries) {
+function init(cass_client, preparedQueries) {
     cassandra_client = cass_client;
-    communicator = communication_device;
-    isMaster = master;
     prepareds = preparedQueries;
-
-    communicator.on('msg:create_cassandra_table', function(options) {
-        logger.info('received create_table message', options);
-        createTable(options);
-    });
 }
 
 function buildOptsString(tableOpts) {
@@ -56,7 +49,7 @@ function validateHasAll(options, required) {
 }
 
 function createTable(options) {
-    validateHasAll(options, 'keyspace', 'columnfamily', 'table_fields', 'primary_key', 'table_options');
+    validateHasAll(options, ['keyspace', 'columnfamily', 'table_fields', 'primary_key', 'table_options']);
     var fullName = options.keyspace + '.' + options.columnfamily;
     if (!pendingTables[fullName]) {
         pendingTables[fullName] = cassandra_client.createKeyspaceIfNotExists(options.keyspace, 1)
@@ -75,7 +68,7 @@ function createTable(options) {
 }
 
 function getPrepared(options) {
-    validateHasAll(options, 'keyspace', 'columnfamily', 'table_fields', 'primary_key', 'table_options', 'cql');
+    validateHasAll(options, ['keyspace', 'columnfamily', 'table_fields', 'primary_key', 'table_options', 'cql']);
     var keyspace = options.keyspace;
     var cfName = options.columnfamily;
     var cql = util.format(options.cql, keyspace, cfName);
@@ -104,31 +97,12 @@ function ensureTable(options) {
         logger.warn('invalid space', keyspace);
         return Promise.reject(new Error('invalid space ' + keyspace));
     }
-    if (isMaster) {
-        return createTable(options)
-        .catch(function(err) {
-            logger.error('failed to create table', fullTableName, err);
-            throw err;
-        });
-    } else {
-        return retry(function() {
-            return cassandra_client.checkTableExists(fullTableName)
-                .catch(function(err) {
-                    logger.warn('table not found', fullTableName);
-                    var cause = err.cause.message;
-                    if (cause.match(/unconfigured columnfamily/) || cause.match(/does not exist/)) {
-                        logger.info('sending create table', fullTableName, 'to', communicator.who_is_master);
-                        communicator.send_to_master('create_cassandra_table', options);
-                    }
-                    throw errors.categorize_error(err, 'ensure_table');
-                });
-        }, { max_tries: 30, interval: 3000 })
-        .catch(function(err) {
-            logger.error('failed to find table for', fullTableName, err);
-            // the retry wraps the original error but for error handling we don't want that
-            throw err.failure;
-        });
-    }
+
+    return createTable(options)
+    .catch(function(err) {
+        logger.error('failed to create table', fullTableName, err);
+        throw err;
+    });
 }
 
 function _execute_query(q, opts, cb) {
@@ -157,5 +131,6 @@ module.exports = {
     execute_query: execute_query,
     runCql: runCql,
     getAllTablesForKeyspace: getAllTablesForKeyspace,
+    validateHasAll: validateHasAll,
     awaitTable: awaitTable,
 };

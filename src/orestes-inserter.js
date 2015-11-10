@@ -1,21 +1,17 @@
 var request = require('request');
 var Promise = require('bluebird');
-var shared = require('../import/import-shared');
-var Metrics = require('metrics');
-var OrestesConfig = require('./orestes-config');
+var OrestesSettings = require('./orestes-settings');
 var utils = require('./orestes-utils');
-var valueCode = OrestesConfig.value_type.code;
-var string = OrestesConfig.string_type;
-var int = OrestesConfig.int_type;
+var valueCode = OrestesSettings.value_type.code;
+var string = OrestesSettings.string_type;
+var int = OrestesSettings.int_type;
 var logger = require('logger').get('orestes-inserter');
-var errs = require('../import/import-errors');
-var cass_errors = require('../cassandra').errors;
-var Schemas = require('../electra/schemas');
+var cass_errors = require('./cassandra').errors;
 
-
-var SAMPLE_RATE, cassandra_client, bubo, es_url, metrics, METADATA_GRANULARITY;
+var cassandra_client, bubo, es_url, space_info;
 var MS_IN_DAY = 1000 * 60 * 60 * 24;
 var BATCH_SIZE = 100;
+var success = {status: 200, message: 'inserted'};
 var preparedHints = {
     hints: [string, int, valueCode]
 };
@@ -35,31 +31,27 @@ function OrestesInserter(options) {
     this.active_batch = cassandra_client.new_batch('unlogged');
     this.want_result_details = options.want_result_details;
     this.space = options.space;
-    this.timer = metrics.create_timer('orestes.insert', SAMPLE_RATE);
     this.prepareds = options.prepareds;
     this.bubo = bubo;
 }
 
-function init(config, bubo_cache, cassandraClient, metrics_) {
-    SAMPLE_RATE = config.get('sample_rate');
+function init(config, bubo_cache, cassandraClient) {
     cassandra_client = cassandraClient;
     bubo = bubo_cache;
-    es_url = 'http://' + config.get('elasticsearch:host') + ':' + config.get('elasticsearch:port') + '/_bulk';
-    metrics = metrics_ || new Metrics();
-    METADATA_GRANULARITY = config.get('orestes').metadata_granularity_days;
+    es_url = 'http://' + config.elasticsearch.host + ':' + config.elasticsearch.port + '/_bulk';
+    space_info = config.spaces;
 }
 
 OrestesInserter.prototype.push = function(pt) {
-    pt.time = shared.normalize_timestamp(pt.time).getTime();
     this.schema = this.schema || pt.source_type;
     if (this.schema !== pt.source_type) { // can also be removed if/when import API changes
         throw new Error('Can only import to one schema per insert');
     }
 
     var today = Math.floor(pt.time / MS_IN_DAY);
-    var bucket = utils.roundToGranularity(today);
+    var bucket = utils.roundToGranularity(today, this.space);
     var prepared = this.prepareds[bucket];
-    var offset = pt.time % (MS_IN_DAY * METADATA_GRANULARITY);
+    var offset = pt.time % (MS_IN_DAY * space_info[this.space].table_granularity_days);
 
     var attrString = this.validate_and_handle_metadatum(pt, bucket);
 
@@ -78,9 +70,6 @@ OrestesInserter.prototype.end = function() {
         this.batches.push(execute_batch(this.active_batch));
     }
 
-    metrics.count('cassandra.request.op__batch_insert', this.batches.length);
-    metrics.count('cassandra.record.op__batch_insert', this.total);
-
     return Promise.all(this.batches.concat([this.insert_metadata()]))
     .then(function() {
         var result = {
@@ -91,7 +80,7 @@ OrestesInserter.prototype.end = function() {
         if (self.want_result_details) {
             var details = [];
             for (var k = 0; k < self.total; k++) {
-                details[k] = shared.success;
+                details[k] = success;
             }
             result.details = details;
         }
@@ -102,9 +91,6 @@ OrestesInserter.prototype.end = function() {
         logger.error('error during import:', err);
 
         throw cass_errors.categorize_error(err, 'batch_insert');
-    })
-    .finally(function() {
-        self.timer.stop();
     });
 };
 
@@ -135,16 +121,13 @@ OrestesInserter.prototype.insert_metadata = function() {
         var createCmd = JSON.stringify({
             create: {
                 _index: utils.metadataIndexName(self.space, this.buckets[k]),
-                _type: Schemas.mapping_name(self.schema),
+                _type: 'metric',
                 _id: this.attrStrings[k]
             }
         });
 
         requestBody += createCmd + '\n' + this.metadata[k] + '\n';
     }
-
-    metrics.increment('elasticsearch.request.op__insert_metadata', SAMPLE_RATE);
-    metrics.count('elasticsearch.record.op__insert_metadata', this.metadata.length, SAMPLE_RATE);
 
     if (requestBody.length > 0) {
         return request.postAsync({
@@ -175,11 +158,28 @@ var execute_batch = Promise.promisify(_execute_batch);
 function validateValue(metric) {
     var v = metric.value;
     if (typeof v !== 'number' || v !== v) {
-        throw new errs.MalformedError('invalid value ' + v);
+        throw new Error('invalid value ' + v);
     }
 }
 
+function insert(points, space, want_result_details) {
+    return utils.getImportPrepareds(space, points)
+        .then(function(prepareds) {
+            var inserter = new OrestesInserter({
+                prepareds: prepareds,
+                space: space,
+                want_result_details: want_result_details
+            });
+
+            points.forEach(function(pt) {
+                inserter.push(pt);
+            });
+
+            return inserter.end();
+        });
+}
+
 module.exports = {
-    inserter: OrestesInserter,
+    insert: insert,
     init: init
 };

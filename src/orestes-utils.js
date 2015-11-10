@@ -1,24 +1,17 @@
 var _ = require('underscore');
 var Promise = require('bluebird');
-var validate = require('jut-validate-options');
-var errs = require('../import/import-errors');
-var OrestesConfig = require('./orestes-config');
-var cassUtils = require('../cassandra').utils;
-var metricsTableName = OrestesConfig.TABLE_NAME;
-var keyspacePrefix = OrestesConfig.KEYSPACE_PREFIX;
-var normalize_timestamp = require('../import/import-shared').normalize_timestamp;
+var OrestesSettings = require('./orestes-settings');
+var cassUtils = require('./cassandra').utils;
+var metricsTableName = OrestesSettings.TABLE_NAME;
+var keyspacePrefix = OrestesSettings.KEYSPACE_PREFIX;
 var msInDay = 1000 * 60 * 60 * 24;
-var METADATA_GRANULARITY, bubo, communicator;
+var bubo;
 var logger = require('logger').get('orestes');
 
-var isMaster;
 var prepareds = {};
 var orestesTableConfig;
 
-var nullCommunicator = {
-    on: _.noop,
-    send_to_master: _.noop
-};
+var METADATA_GRANULARITY = 1; // dave get rid of this you fool
 
 var preparedBases = {
     select: 'SELECT offset, value FROM %s.%s WHERE attrs = ? AND offset >= ? AND offset < ?;',
@@ -26,20 +19,31 @@ var preparedBases = {
     import: 'INSERT INTO %s.%s (attrs, offset, value) VALUES (?, ?, ?);'
 };
 
-function init(config, cassandraClient, communicator_, bubo_cache) {
-    communicator = communicator_ || nullCommunicator;
+var table_options = {
+    compact_storage: true,
+    bloom_filter_fp_chance: 0.010000,
+    comment: '',
+    dclocal_read_repair_chance: 0.000000,
+    gc_grace_seconds: 864000,
+    read_repair_chance: 1.000000,
+    default_time_to_live: 0,
+    speculative_retry: 'NONE',
+    memtable_flush_period_in_ms: 0,
+    compaction: {class: 'SizeTieredCompactionStrategy', cold_reads_to_omit: 0.0},
+    compression: {sstable_compression: 'LZ4Compressor'}
+};
+
+function init(config, cassandraClient, bubo_cache) {
     bubo = bubo_cache;
-    METADATA_GRANULARITY = config.get('orestes').metadata_granularity_days;
-    isMaster = config.get('master');
 
-    cassUtils.init(cassandraClient, communicator, isMaster, prepareds);
+    cassUtils.init(cassandraClient, prepareds);
 
-    var tableOptions = cassUtils.buildOptsString(config.get('orestes').table_opts);
+    var tableOptions = cassUtils.buildOptsString(table_options);
     logger.info('table options string', tableOptions);
 
     orestesTableConfig = {
-        table_fields: OrestesConfig.table_fields,
-        primary_key: OrestesConfig.primary_key,
+        table_fields: OrestesSettings.table_fields,
+        primary_key: OrestesSettings.primary_key,
         table_options: tableOptions
     };
 }
@@ -97,12 +101,24 @@ function getOrestesPrepared(space, day, type) {
     return cassUtils.getPrepared(preparedOptions);
 }
 
-function getImportPrepareds(space, points, metricSchemas) {
+function normalize_timestamp(ts) {
+    if (typeof ts === 'string') {
+        // XXX if we only want to support ISO 8601, we should
+        // have a parser for that, Date.parse() will accept other
+        // formats as well...
+        ts = Date.parse(ts);
+    }
+
+    if (typeof ts !== 'number' || ts !== ts) { // speedy hack for isNaN(ts)
+        throw new errors.MalformedError('invalid timestamp');
+    }
+
+    return new Date(ts);
+}
+
+function getImportPrepareds(space, points) {
     var days = {};
     points.forEach(function(pt) {
-        if (!_.has(metricSchemas, pt.source_type)) {
-            return;
-        }
         try {
             pt.time = normalize_timestamp(pt.time).getTime();
         } catch (err) {
@@ -191,22 +207,22 @@ function getAttributeString(pt, unwantedTags) {
 // over the keys of the point for performance
 function getValidatedStringifiedPoint(pt, attrs) {
     if (!pt.hasOwnProperty('time') || !pt.hasOwnProperty('value')) {
-        validate.hasAll(pt, 'time', 'value');
+        cass_utils.validateHasAll(pt, ['time', 'value']);
     }
     if (attrs.length === 0) {
-        throw new errs.MalformedError('metrics must have at least one tag');
+        throw new Error('metrics must have at least one tag');
     }
     // the second argument to JSON.stringify is a whitelist of keys to stringify
     return JSON.stringify(pt, Object.keys(pt).filter(function(key) {
         var value = pt[key];
         if (key === 'value') {
             if (typeof value !== 'number' || value !== value) { // speedy hack for isNaN(value)
-                throw new errs.MalformedError('invalid value ' + value);
+                throw new Error('invalid value ' + value);
             }
         } else {
             // disallow any points with nested structure (typeof null === 'object' so we check truthiness too)
             if (value && typeof value === 'object') {
-                throw new errs.MalformedError('invalid tag - value is an object or array ' + key + ' : ' + value);
+                throw new Error('invalid tag - value is an object or array ' + key + ' : ' + value);
             }
         }
 
@@ -237,5 +253,6 @@ module.exports = {
     buboOptions: {
         ignoredAttributes: defaultUnwantedTags
     },
+    normalize_timestamp: normalize_timestamp,
     uncompactRows: uncompactRows
 };

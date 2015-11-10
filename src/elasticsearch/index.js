@@ -15,12 +15,11 @@ var Electra = Base.extend({
 
         this.es_url = url.format({
             protocol: 'http',
-            hostname: this.config.get('elasticsearch:host'),
-            port: this.config.get('elasticsearch:port')
+            hostname: config.elasticsearch.host,
+            port: config.elasticsearch.port
         });
 
         query.init(config);
-        aggregation.init(config);
     },
 
     _connect_to_es: function() {

@@ -1,0 +1,17 @@
+{
+    "port": 9668,
+    "cassandra": {
+        "host": "127.94.0.1",
+        "native_transport_port": 9042
+    },
+    "elasticsearch": {
+        "host": "localhost",
+        "port": 9200
+    },
+    "spaces": {
+        "default": {
+            "retention_days": -1,
+            "table_granularity_days": 1
+        }
+    }
+}

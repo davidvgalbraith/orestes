@@ -1,4 +1,4 @@
-var CassandraClient = require('../cassandra').client;
+var CassandraClient = require('./cassandra').client;
 
 var value_type = {
     string: 'double',

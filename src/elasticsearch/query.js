@@ -22,31 +22,24 @@ var DEFAULT_PARAMETERS = {ignore_unavailable: true};
 // isn't part of the path leaving:
 var MAX_ES_URL_LENGTH = 4095 - 15;
 
-function build_electra_url(spaces, schemas, from, to, suffix) {
-    var dates = getTimeIndices(from, to);
-    return _build_url('events-', spaces, schemas, dates, suffix);
-}
-
-function build_orestes_url(spaces, schemas, days, params, suffix) {
-    return _build_url('metadata-', spaces, schemas, days, suffix, _.extend(params, DEFAULT_PARAMETERS));
+function build_orestes_url(space, days, params, suffix) {
+    return _build_url('metadata-', space, days, suffix, _.extend(params, DEFAULT_PARAMETERS));
 }
 
 function build_scroll_url() {
     var parameters = _.extend({
-        scroll: '1m',
+        scroll: '10m',
     }, DEFAULT_PARAMETERS);
-    return _build_url(null, null, null, null, null, '_search/scroll', parameters);
+    return _build_url(null, null, null, '_search/scroll', parameters);
 }
 
-function _build_url(prefix, spaces, schemas, dates, suffix, parameters) {
+function _build_url(prefix, space, dates, suffix, parameters) {
     suffix = suffix || SEARCH_SUFFIX;
     parameters = parameters || DEFAULT_PARAMETERS;
 
     var indices = [];
-    _.each(spaces, function(space) {
-        _.each(dates, function(dateString) {
-            indices.push(prefix + space + '@'+ dateString);
-        });
+    _.each(dates, function(dateString) {
+        indices.push(prefix + space + '@'+ dateString);
     });
 
     var str = indices.join(',');
@@ -59,16 +52,13 @@ function _build_url(prefix, spaces, schemas, dates, suffix, parameters) {
         parameter_string = '?' + parameter_string;
     }
 
-    var path = str + schema_str + suffix + parameter_string;
+    var path = str + suffix + parameter_string;
 
     // if the combination of indices and mappings and parameters
     // is too long, then use wildcards for indices.
     if (path.length > MAX_ES_URL_LENGTH) {
-        indices = _.map(spaces, function(space) {
-            return prefix + space + '@*';
-        });
-        str = indices.join(',');
-        path = str + schema_str + suffix + parameter_string;
+        str = prefix + space + '@*';
+        path = str + suffix + parameter_string;
     }
 
     return 'http://' + es_config.host + ':' + es_config.port + '/' + path;
@@ -179,13 +169,12 @@ function execute(url, body, method, options) {
 }
 
 function init(config) {
-    es_config = config.get('elasticsearch');
+    es_config = config.elasticsearch;
 }
 
 module.exports = {
     init: init,
     MAX_ES_URL_LENGTH: MAX_ES_URL_LENGTH,
-    build_electra_url: build_electra_url,
     build_orestes_url: build_orestes_url,
     build_scroll_url: build_scroll_url,
     execute: execute
