@@ -90,8 +90,11 @@ function _init_routes(config) {
             });
     });
 
-    app['delete']('/:space', body_parser.json(), function delete_data(req, res, next) {
-        return Delete.remove(req.body);
+    app.post('/delete/', body_parser.json(), function delete_data(req, res, next) {
+        return Delete.remove(req.body)
+            .then(function() {
+                res.sendStatus(SUCCESS);
+            });
     });
 
     return new Promise(function(resolve, reject) {

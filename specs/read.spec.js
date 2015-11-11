@@ -9,6 +9,7 @@ var test_utils = require('./orestes-test-utils');
 /* Assumes Orestes/Cassie/ES already running, Orestes at localhost:9668 */
 
 var BASE_URL = 'http://localhost:9668/';
+var msInDay = 1000 * 60 * 60 * 24;
 
 var points = [
     { time: '2015-11-08T04:00:00.000Z', host: 'host1', pop: 'sea', value: 1 },
@@ -18,7 +19,7 @@ var points = [
 
 function seriesFromPoints(points) {
     var grouped = _.groupBy(points, function(pt) {
-        return utils.getAttributeString(pt);
+        return orestes_utils.getAttributeString(pt);
     });
     var result = [];
     _.each(grouped, function(points, rowKey) {
@@ -41,7 +42,6 @@ function write(points) {
     })
     .spread(function(res, body) {
         expect(res.statusCode).equal(200);
-        console.error('reite me', JSON.stringify(body, null, 2))
     });
 }
 
@@ -64,8 +64,8 @@ function read_all() {
 }
 
 function remove(space) {
-    var delete_url = BASE_URL;
-    return request.deleteAsync({
+    var delete_url = BASE_URL + 'delete';
+    return request.postAsync({
         url: delete_url,
         json: {
             space: space,
@@ -73,11 +73,12 @@ function remove(space) {
         }
     })
     .spread(function(res, body) {
-        console.error('beleep me', JSON.stringify(body, null, 2));
+        expect(res.statusCode).equal(200);
     });
 }
 
 function write_read_delete_test(points, space) {
+    space = space || 'default';
     return write(points)
         .then(function() {
             return retry(function() {
@@ -95,8 +96,44 @@ function write_read_delete_test(points, space) {
 describe('Orestes', function() {
     this.timeout(30000);
 
+    before(function() {
+        return remove('default');
+    });
+
     it('writes and reads a single point', function() {
         var one_point = test_utils.generate_sample_data({count: 1});
         return write_read_delete_test(one_point);
+    });
+
+    it('writes and reads several points', function() {
+        var points = test_utils.generate_sample_data({count: 10});
+        return write_read_delete_test(points);
+    });
+
+    it('writes and reads from several series', function() {
+        var points = test_utils.generate_sample_data({
+            count: 100,
+            tags: {
+                host: ['a', 'b', 'c'],
+                pop: ['d', 'e', 'f', 'g'],
+                bananas: ['one', 'two', 'three', 'four', 'five']
+            }
+        });
+
+        return write_read_delete_test(points);
+    });
+
+    it('writes and reads points over several days', function() {
+        var start = Date.now() - msInDay * 10;
+        var points = test_utils.generate_sample_data({
+            count: 100,
+            start: start,
+            interval: msInDay/10,
+            tags: {
+                host: ['a', 'b', 'c'],
+            }
+        });
+
+        return write_read_delete_test(points);
     });
 });

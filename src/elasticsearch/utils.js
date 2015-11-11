@@ -25,12 +25,25 @@ function es_type_to_source_type(type) {
     return m ? m[1] : type;
 }
 
+function listIndices(es_url) {
+    var listIndexesUrl = es_url + '_aliases';
+    return request.getAsync(listIndexesUrl)
+        .spread(function(res, body) {
+            return JSON.parse(body);
+        });
+}
+
 function synchronousDeleteIndices(es_url, indices) {
     return Promise.each(indices, function(index) {
+        var deleteOpts = {
+            url: es_url + index,
+            method: 'DELETE'
+        };
+
         logger.info('deleting', deleteOpts.url);
         var url = es_url + index;
 
-        return request.deleteAsync(url)
+        return Promise.promisify(request)(url, deleteOpts)
         .spread(function(res, body) {
             // sometimes it takes a while for elasticsearch to delete an index
             // we want to make sure the indices are gone before we continue
@@ -49,5 +62,6 @@ function synchronousDeleteIndices(es_url, indices) {
 module.exports = {
     synchronousDeleteIndices: synchronousDeleteIndices,
     pointsFromESDocs: pointsFromESDocs,
+    listIndices: listIndices,
     sourceTypeFromESDoc: es_type_to_source_type
 };

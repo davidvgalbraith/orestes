@@ -17,25 +17,23 @@ function init(config, cassandraClient) {
 
 function remove(query) {
     var space = query.space;
-    var listIndexesUrl = es_url + '_aliases';
     var today = Math.floor(Date.now() / msInDay);
     var doomedDay = today - query.keep_days;  // latest day to delete
 
     utils.clearCaches(space, doomedDay);
     var granularity = space_info[space].table_granularity_days;
 
-    // get a list of all indexes
     return Promise.all([
         utils.getAllTablesForSpace(space),
-        request.getAsync(listIndexesUrl).spread(function(res, body) { return body; })
+        electra_utils.listIndices(es_url)
     ])
     .spread(function(tables, indices) {
-        var tablesToDelete = tables.filter(function(table) {
+        var tablesToDelete = tables.filter(function shouldDropTable(table) {
             var end = Math.min(utils.dayFromOrestesTable(table) + granularity-1, today);
             return end <= doomedDay;
         });
 
-        var indexesToDelete = _.keys(JSON.parse(indices)).filter(function shouldDropIndex(index) {
+        var indexesToDelete = Object.keys(indices).filter(function shouldDropIndex(index) {
             var end = Math.min(utils.dayFromIndex(index) + granularity-1, today);
             return index.indexOf('metadata') === 0 &&
                 utils.spaceFromIndex(index) === query.space &&

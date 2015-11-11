@@ -10,7 +10,7 @@ var cass_errors = require('./cassandra').errors;
 var uncompactRows = utils.uncompactRows;
 var aggregation = require('./elasticsearch/aggregation');
 var Bubo = require('./bubo');
-var sourceTypeFromESDoc = require('./elasticsearch/utils').sourceTypeFromESDoc;
+var electra_utils = require('./elasticsearch/utils');
 
 var logger = require('logger').get('orestes');
 var msInDay = 1000 * 60 * 60 * 24;
@@ -120,16 +120,19 @@ function get_metric_streams(es_filter, space, from, to) {
     });
 }
 
-// for each day between from and to, find all the streams we need to read from
-// for that day and return an object with the right prepared queries
-function buildQueries(doc, space, fromMs, toMs) {
+// for each day between from and to in validDays, find all the streams we need
+// to read from for that day and return an object with the right prepared queries
+function buildQueries(doc, space, fromMs, toMs, validDays) {
     var stream = doc._id;
     var fromDay = Math.floor(fromMs / msInDay);
     var toDay = Math.floor(toMs / msInDay);
     var firstWeek = utils.roundToGranularity(fromDay, space);
     var lastWeek = utils.roundToGranularity(toDay, space);
     var granularity = space_info[space].table_granularity_days;
-    var allWeeks = _.range(firstWeek, lastWeek, granularity);
+    var allWeeks = _.range(firstWeek, lastWeek+1, granularity).filter(function(day) {
+        return validDays.hasOwnProperty(day);
+    });
+
     var msInWeek = granularity * msInDay;
 
     return Promise.map(allWeeks, function buildQuery(week) {
@@ -307,7 +310,7 @@ function get_stream_list(emit, es_filter, space, options) {
         }
 
         out.forEach(function(hit) {
-            hit._source.source_type = sourceTypeFromESDoc(hit._type);
+            hit._source.source_type = electra_utils.sourceTypeFromESDoc(hit._type);
         });
 
         emit(_.pluck(out, '_source'));
@@ -350,12 +353,13 @@ function read(es_filter, space, from, to, process_series) {
     var space_bucket = space + '@1';
     var fromMs = new Date(from).getTime();
     var toMs = new Date(to).getTime();
+    var validDays;
 
     function es_document_callback(docs) {
         return Promise.each(docs, function read_points_if_new_stream(doc) {
             bubo.lookup_point(space_bucket, doc._source, buboResult);
             if (!buboResult.found) {
-                return buildQueries(doc, space, fromMs, toMs)
+                return buildQueries(doc, space, fromMs, toMs, validDays)
                     .then(function(query_object) {
                         var points = [];
                         return Promise.each(query_object.queries, function execute_query_and_buffer_results(query) {
@@ -381,7 +385,17 @@ function read(es_filter, space, from, to, process_series) {
         });
     }
 
-    return stream_metadata(es_filter, space, fromMs, toMs, es_document_callback);
+    return electra_utils.listIndices(es_url)
+        .then(function(indices) {
+            var days = Object.keys(indices).filter(function(index) {
+                return utils.spaceFromIndex(index) === space;
+            })
+            .map(utils.dayFromIndex);
+
+            validDays = _.object(days, days);
+
+            return stream_metadata(es_filter, space, fromMs, toMs, es_document_callback);
+        });
 }
 
 module.exports = {
