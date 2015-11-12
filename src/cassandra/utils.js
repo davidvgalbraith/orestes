@@ -44,7 +44,7 @@ function validateHasAll(options, required) {
     });
 
     if (missing.length > 0) {
-        throw new Error('missing required options: ' + JSON.stringify(missing));
+        throw new Error('missing required keys: ' + JSON.stringify(missing));
     }
 }
 

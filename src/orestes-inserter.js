@@ -11,7 +11,8 @@ var cass_errors = require('./cassandra').errors;
 var cassandra_client, bubo, es_url, space_info;
 var MS_IN_DAY = 1000 * 60 * 60 * 24;
 var BATCH_SIZE = 100;
-var success = {status: 200, message: 'inserted'};
+var ES_SUCCESSFUL_CREATE_CODE = 201;
+var ES_DOCUMENT_EXISTS_CODE = 409;
 var preparedHints = {
     hints: [string, int, valueCode]
 };
@@ -29,10 +30,10 @@ function OrestesInserter(options) {
     this.total = 0;
     this.batches = [];
     this.active_batch = cassandra_client.new_batch('unlogged');
-    this.want_result_details = options.want_result_details;
     this.space = options.space;
     this.prepareds = options.prepareds;
     this.bubo = bubo;
+    this.errors = [];
 }
 
 function init(config, bubo_cache, cassandraClient) {
@@ -43,6 +44,17 @@ function init(config, bubo_cache, cassandraClient) {
 }
 
 OrestesInserter.prototype.push = function(pt) {
+    try {
+        this._push(pt);
+    } catch(err) {
+        this.errors.push({
+            point: pt,
+            error: err.message
+        });
+    }
+};
+
+OrestesInserter.prototype._push = function(pt) {
     this.schema = this.schema || pt.source_type;
     if (this.schema !== pt.source_type) { // can also be removed if/when import API changes
         throw new Error('Can only import to one schema per insert');
@@ -71,22 +83,6 @@ OrestesInserter.prototype.end = function() {
     }
 
     return Promise.all(this.batches.concat([this.insert_metadata()]))
-    .then(function() {
-        var result = {
-            success: self.total,
-            fail: 0
-        };
-
-        if (self.want_result_details) {
-            var details = [];
-            for (var k = 0; k < self.total; k++) {
-                details[k] = success;
-            }
-            result.details = details;
-        }
-
-        return result;
-    })
     .catch(function(err) {
         logger.error('error during import:', err);
 
@@ -134,6 +130,17 @@ OrestesInserter.prototype.insert_metadata = function() {
             url: es_url,
             body: requestBody
         })
+        .spread(function(res, body) {
+            var items = JSON.parse(body).items;
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i];
+                if (item.create.status !== ES_SUCCESSFUL_CREATE_CODE && item.create.status !== ES_DOCUMENT_EXISTS_CODE) {
+                    var failed_metadatum = JSON.parse(self.metadata[i]);
+                    self.bubo.remove_point(self.space + '@' + self.buckets[i], failed_metadatum);
+                    self.errors.push({pt: failed_metadatum, error: item.create.error});
+                }
+            }
+        })
         .catch(function(err) {
             // if metadata insertion to ES fails, we have to clear the metadata
             // cache for those points or else they'll never get written
@@ -162,13 +169,13 @@ function validateValue(metric) {
     }
 }
 
-function insert(points, space, want_result_details) {
+function insert(points, space) {
+    var inserter;
     return utils.getImportPrepareds(space, points)
         .then(function(prepareds) {
-            var inserter = new OrestesInserter({
+            inserter = new OrestesInserter({
                 prepareds: prepareds,
-                space: space,
-                want_result_details: want_result_details
+                space: space
             });
 
             points.forEach(function(pt) {
@@ -176,6 +183,9 @@ function insert(points, space, want_result_details) {
             });
 
             return inserter.end();
+        })
+        .then(function() {
+            return {errors: inserter.errors};
         });
 }
 

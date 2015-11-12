@@ -59,19 +59,21 @@ function _init_routes(config) {
     app.post('/write/:space*?', body_parser.json(), function write(req, res, next) {
         var points = req.body;
         var space = req.params.space || 'default';
-        var want_result_details = req.headers['x-want-result-details'];
 
-        return Insert.insert(points, space, want_result_details)
+        return Insert.insert(points, space)
             .then(function(result) {
                 res.json(result);
+            })
+            .catch(function(err) {
+                return next(err);
             });
     });
 
     app.post('/read/:space*?', body_parser.json(), function read(req, res, next) {
         var space = req.params.space || 'default';
         var es_filter = req.body.query;
-        var from = req.body.start;
-        var to = req.body.end;
+        var start = req.body.start;
+        var end = req.body.end;
 
         res.write('[');
         var first = true;
@@ -84,16 +86,66 @@ function _init_routes(config) {
             res.write(JSON.stringify(series));
         }
 
-        return Query.read(es_filter, space, from, to, process_series)
+        return Query.read(es_filter, space, start, end, process_series)
             .then(function() {
                 res.end(']');
+            })
+            .catch(function(err) {
+                return next(err);
             });
     });
 
-    app.post('/delete/', body_parser.json(), function delete_data(req, res, next) {
+    app.post('/series/:space*?', body_parser.json(), function streams(req, res, next) {
+        var space = req.params.space || 'default';
+        var es_filter = req.body.query;
+        var start = req.body.start;
+        var end = req.body.end;
+
+        res.write('[');
+        var first = true;
+        function process_streams(streams) {
+            if (first) {
+                first = false;
+            } else {
+                res.write(',');
+            }
+
+            var json = JSON.stringify(streams);
+            // write the objects in the array of streams
+            // but not the "[" and "]" so we just get the top-level array
+            res.write(json.substring(1, json.length-1));
+        }
+
+        return Query.get_stream_list(es_filter, space, start, end, process_streams)
+            .then(function() {
+                res.end(']');
+            })
+            .catch(function(err) {
+                return next(err);
+            });
+    });
+
+    app.post('/select_distinct/:space*?', body_parser.json(), function select_distinct(req, res, next) {
+        var space = req.params.space || 'default';
+        var keys = req.body.keys;
+        var es_filter = req.body.query;
+
+        return Query.select_distinct(es_filter, space, keys)
+            .then(function(result) {
+                res.end(JSON.stringify(result));
+            })
+            .catch(function(err) {
+                return next(err);
+            });
+    });
+
+    app.post('/delete', body_parser.json(), function delete_data(req, res, next) {
         return Delete.remove(req.body)
             .then(function() {
                 res.sendStatus(SUCCESS);
+            })
+            .catch(function(err) {
+                return next(err);
             });
     });
 

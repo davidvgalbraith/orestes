@@ -290,11 +290,14 @@ function stream_metadata(es_filter, space, fromMs, toMs, es_document_callback) {
 // emit() is a callable that is called with successive batches of records.
 // this function returns a Promise that is resolved after all records
 // have been emitted.
-function get_stream_list(emit, es_filter, space, options) {
-    var streams_bubo = options.recent ? null : new Bubo(utils.buboOptions);
+function get_stream_list(es_filter, space, start, end, process_streams) {
+    var startMs = new Date(start).getTime();
+    var endMs = new Date(end).getTime();
+    var days = _get_days(space, startMs, endMs);
+    var streams_bubo = days.length > 1 ? new Bubo(utils.buboOptions) : null;
     var space_bucket = space + '@1';
 
-    function process(docs) {
+    function series_es_document_callback(docs) {
         var out = docs;
 
         if (streams_bubo) {
@@ -304,26 +307,19 @@ function get_stream_list(emit, es_filter, space, options) {
                 // so always give Bubo the same bucket
                 streams_bubo.lookup_point(space_bucket, doc._source, buboResult);
                 if (!buboResult.found) {
-                    out.push(doc);
+                    out.push(doc._source);
                 }
             });
         }
 
-        out.forEach(function(hit) {
-            hit._source.source_type = electra_utils.sourceTypeFromESDoc(hit._type);
-        });
-
-        emit(_.pluck(out, '_source'));
+        return process_streams(out);
     }
 
-    return stream_metadata(process, es_filter, space, options);
+    return stream_metadata(es_filter, space, startMs, endMs, series_es_document_callback);
 }
 
-// optimized version of get_stream_list.
-// unlike get_stream_list, can operate over multiple spaces at a time
-function get_stream_list_opt(es_filter, space, aggregations, options, emit) {
-    var days = options.recent ? _get_recent(space) : _get_days(space);
-    var url = es_query.build_orestes_url(space, days, {});
+function get_stream_list_opt(es_filter, space, aggregations) {
+    var url = es_query.build_orestes_url(space, ['*'], {});
     var body = {
         size: 0,
         aggregations: aggregations.es_aggr
@@ -340,11 +336,16 @@ function get_stream_list_opt(es_filter, space, aggregations, options, emit) {
     return es_query.execute(url, body, 'GET')
     .then(function(response) {
         var points = aggregation.values_from_es_aggr_resp(response, aggregations);
-        emit(points);
+        return points;
+    })
+    .catch(es_errors.ScriptMissing, function() {
+        var err = new Error('You need to install scripts/aggkey.groovy to run multi-field select_distinct queries');
+        err.status = 400;
+        throw err;
     })
     .catch(es_errors.MissingField, function(miss) {
         aggregations = aggregation.remove_field(aggregations, miss.name);
-        return get_stream_list_opt(emit, es_filter, spaces, aggregations, options);
+        return get_stream_list_opt(es_filter, space, aggregations, emit);
     });
 }
 
@@ -398,11 +399,46 @@ function read(es_filter, space, from, to, process_series) {
         });
 }
 
+function select_distinct(es_filter, space, keys) {
+    var MAX_REDUCE_BY_SIZE = 1000000;
+    var single_bucket_aggr = {
+        group: {
+            terms: {
+                field: keys[0],
+                size: 1000000
+            }
+        }
+    };
+
+    var multi_bucket_aggr = {
+        group: {
+            terms: {
+                script_file: 'aggkey',
+                lang: 'groovy',
+                params: {
+                    fields: keys
+                },
+                size: 1000000
+            }
+        }
+    };
+
+    var es_aggr = keys.length === 1 ? single_bucket_aggr : multi_bucket_aggr;
+    var aggr_object = {
+        es_aggr: es_aggr,
+        empty_result: {},
+        empty_fields :[],
+        grouping: keys
+    };
+
+    return get_stream_list_opt(es_filter, space, aggr_object);
+}
+
 module.exports = {
     init: init,
     read: read,
     count_points: count_points,
     get_metric_streams: get_metric_streams,
     get_stream_list: get_stream_list,
-    get_stream_list_opt: get_stream_list_opt
+    select_distinct: select_distinct
 };

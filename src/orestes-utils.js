@@ -207,7 +207,7 @@ function getAttributeString(pt, unwantedTags) {
 // over the keys of the point for performance
 function getValidatedStringifiedPoint(pt, attrs) {
     if (!pt.hasOwnProperty('time') || !pt.hasOwnProperty('value')) {
-        cass_utils.validateHasAll(pt, ['time', 'value']);
+        cassUtils.validateHasAll(pt, ['time', 'value']);
     }
     if (attrs.length === 0) {
         throw new Error('metrics must have at least one tag');

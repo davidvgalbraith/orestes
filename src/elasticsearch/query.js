@@ -99,27 +99,21 @@ function execute(url, body, method, options) {
     })
     .cancellable()
     .spread(function(response, body) {
-        var err;
         if (response.statusCode !== 200 && response.statusCode !== 201) {
-            if (response.statusCode === 500) {
-                err = errors.categorize_error(body.error);
-                if (err && err instanceof errors.MissingField) {
-                    throw err;
-                }
+            var err = errors.categorize_error(body.error);
+            if (err instanceof errors.MissingField ||  err instanceof errors.ScriptMissing) {
+                throw err;
             }
 
             // ugh, if we query a brand new index, we occassionally
             // get this error.  just treat it as empty results.
-            if (response.statusCode === 503 && !options.fatal_503) {
-                err = errors.categorize_error(body.error);
-                if (err && err instanceof errors.AllFailed) {
-                    return {
-                        hits: {
-                            total: 0,
-                            hits: []
-                        }
-                    };
-                }
+            if (err && err instanceof errors.AllFailed) {
+                return {
+                    hits: {
+                        total: 0,
+                        hits: []
+                    }
+                };
             }
 
             if (response.statusCode >= 400) {
