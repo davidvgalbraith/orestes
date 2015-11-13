@@ -1,7 +1,6 @@
 var _ = require('underscore');
 var Promise = require('bluebird');
 var request = Promise.promisifyAll(require('request'));
-var Long = require('long');
 var utils = require('./orestes-utils');
 var cassUtils = require('./cassandra').utils;
 var es_query = require('./elasticsearch/query');
@@ -34,100 +33,64 @@ function init(config) {
     METADATA_FETCH_SIZE_FOR_COUNT = config.metadata_fetch_size_for_count || 2000;
 }
 
-function count_points(es_filter, space, from, to, groupby, emit) {
-    var granularity = space_info[space].table_granularity_day;
-    var msInWeek = granularity * msInDyay;
-    var fromMs = from ? from.milliseconds() : 0;
-    var toMs = to ? to.milliseconds() : Date.now();
-    var fromDay = Math.floor(fromMs / msInDay);
-    var toDay = Math.floor(toMs / msInDay);
-    var firstWeek = utils.roundToGranularity(fromDay);
-    var lastWeek = utils.roundToGranularity(toDay);
-    var options = {
-        from: from,
-        to: to,
-        streams_fetch_size: METADATA_FETCH_SIZE_FOR_COUNT,
-    };
-    function add_counts(docs) {
-        return Promise.map(docs, function(doc) {
-            var day = utils.dayFromIndex(doc._index);
-            var space = utils.spaceFromIndex(doc._index);
-            var fromOffset = day === firstWeek ? fromMs % msInWeek : 0;
-            var toOffset = day === lastWeek ? toMs % msInWeek : msInWeek;
-            return utils.getPrepared(space, day, 'count')
-                .then(function(prepared) {
-                    var q = prepared.query();
-                    q.bind([doc._id, fromOffset, toOffset], {});
-                    return cassUtils.execute_query(q, {});
-                })
-                .then(function(result) {
-                    var count_object = result.rows[0].count;
-                    var count = new Long(count_object.low, count_object.high).toInt();
-                    var groupby_fields = _.pick(doc._source, groupby);
+// find the indices that exist in this space
+// used to keep us from trying to read nonexistent tables
+// if your query's time range is longer than the span you have data
+function get_valid_days(space) {
+    return electra_utils.listIndices(es_url)
+        .then(function(indices) {
+            var days = Object.keys(indices).filter(function(index) {
+                return utils.spaceFromIndex(index) === space;
+            })
+            .map(utils.dayFromIndex);
 
-                    emit(count, groupby_fields);
+            return _.object(days, days);
+        });
+}
+
+function count_points(es_filter, space, startMs, endMs, process_series) {
+    var validDays;
+    var bubo = new Bubo(utils.buboOptions);
+    var space_bucket = space + '@1';
+
+    var granularity = space_info[space].table_granularity_days;
+    var msInWeek = granularity * msInDay;
+    var startDay = Math.floor(startMs / msInDay);
+    var endDay = Math.floor(endMs / msInDay);
+    var firstWeek = utils.roundToGranularity(startDay);
+    var lastWeek = utils.roundToGranularity(endDay);
+
+    function count_doc_callback(docs) {
+        return Promise.map(docs, function count_points_if_new_stream(doc) {
+            bubo.lookup_point(space_bucket, doc._source, buboResult);
+            if (buboResult.found) {
+                return;
+            }
+
+            return buildFetcher(doc, space, 'count', startMs, endMs, validDays)
+                .then(function(fetcher) {
+                    return process_series(fetcher);
                 });
+
         }, {concurrency: CONCURRENT_COUNTS});
     }
-    return stream_metadata(add_counts, es_filter, spaces, options);
-}
 
-function get_metric_streams(es_filter, space, from, to) {
-    throw "this is broken now";
-    var queries = {};
-    var fromMs = from.milliseconds();
-    var toMs = to ? to.milliseconds() : Date.now();
-    function build_queries(docs) {
-        return buildQueries(docs, space, fromMs, toMs);
-    }
-    return stream_metadata(build_queries, es_filter, spaces, {from: from, to: to})
-    .then(function() {
-        var streams = _.keys(queries);
-        logger.info('reading from', streams.length, 'streams');
-        return streams.map(function(stream) {
-            var state;
-            queries[stream] = _.sortBy(queries[stream], 'week');
 
-            return function fetch(n, stats) {
-                stats.requests += 1;
-                var info = queries[stream][0];
-                return cassUtils.execute_query(info.q, {
-                    fetchSize: n,
-                    pageState: state
-                })
-                .then(function(data) {
-                    state = info.q;
-                    stats.points += data.rows.length;
-
-                    if (!data.more) {
-                        queries[stream].shift();
-                        state = null;
-                    }
-
-                    var pts = uncompactRows(data.rows, info.week, info.tags);
-
-                    return {
-                        points: pts,
-                        space: info.space,
-                        eof: queries[stream].length === 0
-                    };
-                })
-                .catch(function(err) {
-                    throw cass_errors.categorize_error(err);
-                });
-            };
+    return get_valid_days(space)
+        .then(function(valid_days) {
+            validDays = valid_days;
+            return stream_metadata(es_filter, space, startMs, endMs, count_doc_callback);
         });
-    });
 }
 
-// for each day between from and to in validDays, find all the streams we need
+// for each day between startMs and endMs in validDays, find all the streams we need
 // to read from for that day and return an object with the right prepared queries
-function buildQueries(doc, space, fromMs, toMs, validDays) {
+function buildFetcher(doc, space, queryType, startMs, endMs, validDays) {
     var stream = doc._id;
-    var fromDay = Math.floor(fromMs / msInDay);
-    var toDay = Math.floor(toMs / msInDay);
-    var firstWeek = utils.roundToGranularity(fromDay, space);
-    var lastWeek = utils.roundToGranularity(toDay, space);
+    var startDay = Math.floor(startMs / msInDay);
+    var endDay = Math.floor(endMs / msInDay);
+    var firstWeek = utils.roundToGranularity(startDay, space);
+    var lastWeek = utils.roundToGranularity(endDay, space);
     var granularity = space_info[space].table_granularity_days;
     var allWeeks = _.range(firstWeek, lastWeek+1, granularity).filter(function(day) {
         return validDays.hasOwnProperty(day);
@@ -136,15 +99,15 @@ function buildQueries(doc, space, fromMs, toMs, validDays) {
     var msInWeek = granularity * msInDay;
 
     return Promise.map(allWeeks, function buildQuery(week) {
-        var fromOffset = week === firstWeek ? (fromMs % msInWeek) : 0;
-        var toOffset = week === lastWeek ? (toMs % msInWeek) : msInWeek;
+        var startOffset = week === firstWeek ? (startMs % msInWeek) : 0;
+        var endOffset = week === lastWeek ? (endMs % msInWeek) : msInWeek;
 
         var key = 'space=' + space + ',' + stream;
 
-        return utils.getPrepared(space, week, 'select')
+        return utils.getPrepared(space, week, queryType)
             .then(function(prepared) {
                 var q = prepared.query();
-                q.bind([stream, fromOffset, toOffset], {});
+                q.bind([stream, startOffset, endOffset], {});
                 return {
                     prepared: q,
                     week: week
@@ -152,27 +115,56 @@ function buildQueries(doc, space, fromMs, toMs, validDays) {
             });
     })
     .then(function(queries) {
+        var state;
+
         return {
-            queries: queries,
-            tags: doc._source
+            tags: doc._source,
+            fetch: function fetch(n) {
+                var info = queries[0];
+                var query_options = (n === -1) ? {autoPage: true} : {
+                    fetchSize: n,
+                    pageState: state
+                };
+
+                return cassUtils.execute_query(info.prepared, query_options)
+                .then(function(data) {
+                    state = info.prepared;
+
+                    if (!data.more) {
+                        queries.shift();
+                        state = null;
+                    }
+
+                    var received_points = data.rows.map(function build_orestes_point_output(row) {
+                        return row.count || [info.week * msInDay + row.offset, row.value];
+                    });
+
+                    return {
+                        points: received_points,
+                        eof: queries.length === 0
+                    };
+                })
+                .catch(function(err) {
+                    throw cass_errors.categorize_error(err);
+                });
+            }
         };
     });
 }
 
-function _get_days(space, fromMs, toMs) {
-    var toDay = Math.floor(toMs / msInDay);
+function _get_days(space, startMs, endMs) {
+    var endDay = Math.floor(endMs / msInDay);
     var granularity = space_info[space].table_granularity_days;
     var msInWeek = granularity * msInDay;
-    if (toMs % msInWeek === 0) {
+    if (endMs % msInWeek === 0) {
         // if the query end is right on a week boundary, then we don't need
         // metadata for that week
-        toDay -= 1;
+        endDay -= 1;
     }
 
-    // the index where metadata for the specified start day would be stored
-    var fromDay = utils.roundToGranularity(Math.floor(fromMs / msInDay));
+    var startDay = utils.roundToGranularity(Math.floor(startMs / msInDay));
 
-    return _.range(fromDay, toDay+1, space_info[space].table_granularity_days);
+    return _.range(startDay, endDay+1, space_info[space].table_granularity_days);
 }
 
 function _get_recent(space) {
@@ -207,7 +199,7 @@ function get_streams_query_size(space) {
     });
 }
 
-function stream_metadata(es_filter, space, fromMs, toMs, es_document_callback) {
+function stream_metadata(es_filter, space, startMs, endMs, es_document_callback) {
     var cancelled = false;
 
     return get_streams_query_size(space)
@@ -222,7 +214,7 @@ function stream_metadata(es_filter, space, fromMs, toMs, es_document_callback) {
             scroll: '10m'
         };
 
-        var days = _get_days(space, fromMs, toMs);
+        var days = _get_days(space, startMs, endMs);
         var url = es_query.build_orestes_url(space, days, params);
         var body = {
             size: size
@@ -287,12 +279,10 @@ function stream_metadata(es_filter, space, fromMs, toMs, es_document_callback) {
 }
 
 // get all the stream records that match the given filter/space
-// emit() is a callable that is called with successive batches of records.
+// process_streams() is a callable that is called with successive batches of records.
 // this function returns a Promise that is resolved after all records
 // have been emitted.
-function get_stream_list(es_filter, space, start, end, process_streams) {
-    var startMs = new Date(start).getTime();
-    var endMs = new Date(end).getTime();
+function get_stream_list(es_filter, space, startMs, endMs, process_streams) {
     var days = _get_days(space, startMs, endMs);
     var streams_bubo = days.length > 1 ? new Bubo(utils.buboOptions) : null;
     var space_bucket = space + '@1';
@@ -345,57 +335,32 @@ function get_stream_list_opt(es_filter, space, aggregations) {
     })
     .catch(es_errors.MissingField, function(miss) {
         aggregations = aggregation.remove_field(aggregations, miss.name);
-        return get_stream_list_opt(es_filter, space, aggregations, emit);
+        return get_stream_list_opt(es_filter, space, aggregations);
     });
 }
 
-function read(es_filter, space, from, to, process_series) {
+function read(es_filter, space, startMs, endMs, process_series) {
     var bubo = new Bubo(utils.buboOptions);
     var space_bucket = space + '@1';
-    var fromMs = new Date(from).getTime();
-    var toMs = new Date(to).getTime();
     var validDays;
 
     function es_document_callback(docs) {
         return Promise.each(docs, function read_points_if_new_stream(doc) {
             bubo.lookup_point(space_bucket, doc._source, buboResult);
             if (!buboResult.found) {
-                return buildQueries(doc, space, fromMs, toMs, validDays)
-                    .then(function(query_object) {
-                        var points = [];
-                        return Promise.each(query_object.queries, function execute_query_and_buffer_results(query) {
-                            return cassUtils.execute_query(query.prepared, {
-                                autoPage: true
-                            })
-                            .then(function(result) {
-                                var received_points = result.rows.map(function build_orestes_point_output(row) {
-                                    return [query.week * msInDay + row.offset, row.value];
-                                });
-
-                                points = points.concat(received_points);
-                            });
-                        })
-                        .then(function() {
-                            return process_series({
-                                tags: doc._source,
-                                points: points
-                            });
-                        });
+                return buildFetcher(doc, space, 'select', startMs, endMs, validDays)
+                    .then(function(fetcher) {
+                        return process_series(fetcher);
                     });
             }
         });
     }
 
-    return electra_utils.listIndices(es_url)
-        .then(function(indices) {
-            var days = Object.keys(indices).filter(function(index) {
-                return utils.spaceFromIndex(index) === space;
-            })
-            .map(utils.dayFromIndex);
+    return get_valid_days(space)
+        .then(function(valid_days) {
+            validDays = valid_days;
 
-            validDays = _.object(days, days);
-
-            return stream_metadata(es_filter, space, fromMs, toMs, es_document_callback);
+            return stream_metadata(es_filter, space, startMs, endMs, es_document_callback);
         });
 }
 
@@ -438,7 +403,6 @@ module.exports = {
     init: init,
     read: read,
     count_points: count_points,
-    get_metric_streams: get_metric_streams,
     get_stream_list: get_stream_list,
     select_distinct: select_distinct
 };

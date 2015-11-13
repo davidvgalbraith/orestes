@@ -2,7 +2,9 @@ var Promise = require('bluebird');
 var fse = Promise.promisifyAll(require('fs-extra'));
 var express = require('express');
 var body_parser = require('body-parser');
+var Long = require('long');
 var retry = require('bluebird-retry');
+var error_handler = require('./middleware/error-handler');
 var CassandraClient = require('./cassandra').client;
 var CassandraErrors = require('./cassandra').errors;
 var Elasticsearch = require('./elasticsearch');
@@ -72,13 +74,13 @@ function _init_routes(config) {
     app.post('/read/:space*?', body_parser.json(), function read(req, res, next) {
         var space = req.params.space || 'default';
         var es_filter = req.body.query;
-        var start = req.body.start;
-        var end = req.body.end;
+        var startMs = new Date(req.body.start).getTime();
+        var endMs = new Date(req.body.end).getTime();
 
-        res.write('[');
         var first = true;
-        function process_series(series) {
+        function write_series(series) {
             if (first) {
+                res.write('[');
                 first = false;
             } else {
                 res.write(',');
@@ -86,7 +88,64 @@ function _init_routes(config) {
             res.write(JSON.stringify(series));
         }
 
-        return Query.read(es_filter, space, start, end, process_series)
+        function fetch_series(fetcher) {
+            var points = [];
+            function loop() {
+                return fetcher.fetch(-1)
+                    .then(function(result) {
+                        points = points.concat(result.points);
+                        if (!result.eof) {
+                            return loop();
+                        }
+                    });
+            }
+
+            return loop()
+                .then(function() {
+                    write_series({
+                        tags: fetcher.tags,
+                        points: points
+                    });
+                });
+        }
+
+        function fetch_counts(fetcher) {
+            var count = 0;
+            function loop() {
+                return fetcher.fetch(-1)
+                    .then(function(result) {
+                        var count_object = result.points[0];
+                        count += new Long(count_object.low, count_object.high).toInt();
+                        if (!result.eof) {
+                            return loop();
+                        }
+                    });
+            }
+
+            return loop()
+                .then(function() {
+                    write_series({
+                        tags: fetcher.tags,
+                        count: count
+                    });
+                });
+        }
+
+        var read_promise;
+        var aggregations = req.body.aggregations;
+        if (aggregations) {
+            if (aggregations.length === 1 && aggregations[0].type === 'count') {
+                read_promise = Query.count_points(es_filter, space, startMs, endMs, fetch_counts);
+            } else {
+                var err = new Error('the only supported aggregation type is count');
+                err.status = 400;
+                return next(err);
+            }
+        } else {
+            read_promise = Query.read(es_filter, space, startMs, endMs, fetch_series);
+        }
+
+        return read_promise
             .then(function() {
                 res.end(']');
             })
@@ -98,8 +157,8 @@ function _init_routes(config) {
     app.post('/series/:space*?', body_parser.json(), function streams(req, res, next) {
         var space = req.params.space || 'default';
         var es_filter = req.body.query;
-        var start = req.body.start;
-        var end = req.body.end;
+        var startMs = new Date(req.body.start).getTime();
+        var endMs = new Date(req.body.end).getTime();
 
         res.write('[');
         var first = true;
@@ -116,7 +175,7 @@ function _init_routes(config) {
             res.write(json.substring(1, json.length-1));
         }
 
-        return Query.get_stream_list(es_filter, space, start, end, process_streams)
+        return Query.get_stream_list(es_filter, space, startMs, endMs, process_streams)
             .then(function() {
                 res.end(']');
             })
@@ -148,6 +207,8 @@ function _init_routes(config) {
                 return next(err);
             });
     });
+
+    app.use(error_handler());
 
     return new Promise(function(resolve, reject) {
         app.listen(config.port, function() {

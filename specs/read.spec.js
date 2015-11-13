@@ -117,15 +117,12 @@ function verify_import(points, query, expected) {
     });
 }
 
-function write_read_delete_test(points, query, expected, space) {
-    space = space || 'default';
-    return write(points)
-        .then(function() {
-            return verify_import(points, query, expected);
-        })
-        .then(function() {
-            return remove(space);
-        });
+function buildAttrString(d) {
+    var keys = _.keys(d).sort();
+    var strs = _.map(keys, function(key) {
+        return key + '=' + d[key];
+    });
+    return strs.join(',');
 }
 
 describe('Orestes', function() {
@@ -136,6 +133,17 @@ describe('Orestes', function() {
     });
 
     describe('basic functionality', function() {
+        function write_read_delete_test(points, query, expected, space) {
+            space = space || 'default';
+            return write(points)
+                .then(function() {
+                    return verify_import(points, query, expected);
+                })
+                .then(function() {
+                    return remove(space);
+                });
+        }
+
         it('writes and reads a single point', function() {
             var one_point = test_utils.generate_sample_data({count: 1});
             return write_read_delete_test(one_point);
@@ -195,6 +203,124 @@ describe('Orestes', function() {
         });
     });
 
+    describe('count', function() {
+        function count(query, start, end) {
+            var count_url = BASE_URL + 'read';
+            return request.postAsync({
+                url: count_url,
+                json : {
+                    query: query || ES_MATCH_ALL,
+                    start: start || 0,
+                    end: end || Date.now(),
+                    aggregations: [{
+                        type: 'count'
+                    }]
+                }
+            })
+            .spread(function(res, body) {
+                expect(res.statusCode).equal(200);
+                return body;
+            });
+        }
+
+        function sortSeries(serieses) {
+            return _.sortBy(serieses, function(series) {
+                return buildAttrString(series.tags);
+            });
+        }
+
+        function countsFromPoints(points) {
+            var serieses = seriesFromPoints(points);
+            serieses.forEach(function(series) {
+                series.count = series.points.length;
+                delete series.points;
+            });
+
+            return serieses;
+        }
+
+        var points = test_utils.generate_sample_data({
+            count: 1000,
+            tags: {
+                host: ['a', 'b', 'c'],
+                pop: ['d', 'e', 'f', 'g'],
+                bananas: ['one', 'two', 'three', 'four', 'five']
+            }
+        });
+
+        before(function() {
+            return write(points)
+                .then(function() {
+                    return verify_import(points);
+                });
+        });
+
+        after(function() {
+            return remove('default');
+        });
+
+        it('all points', function() {
+            return count()
+                .then(function(result) {
+                    var received = sortSeries(result);
+                    var expected = sortSeries(countsFromPoints(points));
+
+                    expect(received).deep.equal(expected);
+                });
+        });
+
+        it('with filter', function() {
+            return count({
+                term: {
+                    host: 'a'
+                }
+            })
+            .then(function(result) {
+                var expected = sortSeries(countsFromPoints(points.filter(function(pt) {
+                    return pt.host === 'a';
+                })));
+
+                var received = sortSeries(result);
+
+                expect(received).deep.equal(expected);
+            });
+        });
+
+        it('over several days', function() {
+            var start = Date.now() - msInDay * 10;
+
+            var points = test_utils.generate_sample_data({
+                count: 100,
+                start: start,
+                interval: msInDay/10,
+                tags: {
+                    host: ['a', 'b', 'c'],
+                    name: ['several_days']
+                }
+            });
+
+            var name_filter = {
+                term: {
+                    name: 'several_days'
+                }
+            };
+
+            return write(points)
+                .then(function() {
+                    return verify_import(points, name_filter);
+                })
+                .then(function() {
+                    return count(name_filter);
+                })
+                .then(function(result) {
+                    var expected = sortSeries(countsFromPoints(points));
+                    var received = sortSeries(result);
+
+                    expect(received).deep.equal(expected);
+                });
+        });
+    });
+
     describe('error handling', function() {
         it('fails to write points without time', function() {
             var no_time = {value: 1, name: 'dave'};
@@ -231,14 +357,6 @@ describe('Orestes', function() {
     });
 
     describe('metadata queries', function() {
-        function buildAttrString(d) {
-            var keys = _.keys(d).sort();
-            var strs = _.map(keys, function(key) {
-                return key + '=' + d[key];
-            });
-            return strs.join(',');
-        }
-
         function get_streams(data) {
             return _.chain(data)
                 .sortBy(buildAttrString)
