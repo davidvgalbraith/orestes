@@ -9,7 +9,7 @@ var bubo;
 var logger = require('logger').get('orestes');
 
 var prepareds = {};
-var orestesTableConfig;
+var orestesTableConfig, space_info;
 
 var METADATA_GRANULARITY = 1; // dave get rid of this you fool
 
@@ -35,6 +35,7 @@ var table_options = {
 
 function init(config, cassandraClient, bubo_cache) {
     bubo = bubo_cache;
+    space_info = config.spaces;
 
     cassUtils.init(cassandraClient, prepareds);
 
@@ -71,8 +72,9 @@ function uncompactRows(rows, week, tags) {
 }
 
 // rounds n to the nearest multiple of our metadata granularity
-function roundToGranularity(n) {
-    return Math.floor(n / METADATA_GRANULARITY) * METADATA_GRANULARITY;
+function roundToGranularity(n, space) {
+    var granularity = space_info[space].table_granularity_days;
+    return Math.floor(n / granularity) * granularity;
 }
 
 function spaceFromIndex(_index) {
@@ -102,31 +104,25 @@ function getOrestesPrepared(space, day, type) {
 }
 
 function normalize_timestamp(ts) {
-    if (typeof ts === 'string') {
-        // XXX if we only want to support ISO 8601, we should
-        // have a parser for that, Date.parse() will accept other
-        // formats as well...
-        ts = Date.parse(ts);
-    }
-
+    ts = new Date(ts).getTime();
     if (typeof ts !== 'number' || ts !== ts) { // speedy hack for isNaN(ts)
         throw new errors.MalformedError('invalid timestamp');
     }
 
-    return new Date(ts);
+    return ts;
 }
 
 function getImportPrepareds(space, points) {
     var days = {};
     points.forEach(function(pt) {
         try {
-            pt.time = normalize_timestamp(pt.time).getTime();
+            pt.time = normalize_timestamp(pt.time);
         } catch (err) {
             // catch it later
             return;
         }
 
-        var day = roundToGranularity(Math.floor(pt.time / msInDay));
+        var day = roundToGranularity(Math.floor(pt.time / msInDay), space);
         if (!days[day]) {
             days[day] = 1;
         }
@@ -176,31 +172,8 @@ function weekFromTable(table) {
 
 var defaultUnwantedTags = {
     time: true,
-    space: true,
     value: true,
-    source_type: true
 };
-
-function getAttributeString(pt, unwantedTags) {
-    unwantedTags = unwantedTags || defaultUnwantedTags;
-    var tagNames = [];
-    _.each(pt, function(tagValue, tagName) {
-        if (!unwantedTags[tagName]) {
-            tagNames.push(tagName);
-        }
-    });
-
-    tagNames.sort();
-
-    var attrString = '';
-    var comma = '';
-    for (var tag = tagNames.length - 1; tag >= 0; tag--) {
-        attrString = tagNames[tag] + '=' + pt[tagNames[tag]] + comma + attrString;
-        comma = ',';
-    }
-
-    return attrString;
-}
 
 // this is inaesthetic but Object.keys() is not cheap so we
 // combine the logically distinct operations that iterate
@@ -212,6 +185,7 @@ function getValidatedStringifiedPoint(pt, attrs) {
     if (attrs.length === 0) {
         throw new Error('metrics must have at least one tag');
     }
+    pt.time = normalize_timestamp(pt.time);
     // the second argument to JSON.stringify is a whitelist of keys to stringify
     return JSON.stringify(pt, Object.keys(pt).filter(function(key) {
         var value = pt[key];
@@ -242,7 +216,6 @@ module.exports = {
     dayFromIndex: dayFromIndex,
     getPrepared: getOrestesPrepared,
     getImportPrepareds: getImportPrepareds,
-    getAttributeString: getAttributeString,
     dayFromOrestesTable: dayFromOrestesTable,
     metadataIndexName: metadataIndexName,
     weekFromTable: weekFromTable,
@@ -253,6 +226,5 @@ module.exports = {
     buboOptions: {
         ignoredAttributes: defaultUnwantedTags
     },
-    normalize_timestamp: normalize_timestamp,
     uncompactRows: uncompactRows
 };

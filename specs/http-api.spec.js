@@ -1,136 +1,24 @@
 var Promise = require('bluebird');
 var _ = require('underscore');
 var request = Promise.promisifyAll(require('request'));
-var retry = require('bluebird-retry');
 var expect = require('chai').expect;
 var orestes_utils = require('../src/orestes-utils');
+
 var test_utils = require('./orestes-test-utils');
+var sort_series = test_utils.sort_series;
+var write = test_utils.write;
+var verify_import = test_utils.verify_import;
+var select_distinct = test_utils.select_distinct;
+var build_attr_string = test_utils.build_attr_string;
+
+var Orestes = require('../src/orestes');
 
 /* Assumes Orestes/Cassie/ES already running, Orestes at localhost:9668 */
 
-var BASE_URL = 'http://localhost:9668/';
-var ES_MATCH_ALL = {
-    match_all: {}
-};
-
 var msInDay = 1000 * 60 * 60 * 24;
-
-function seriesFromPoints(points) {
-    var grouped = _.groupBy(points, function(pt) {
-        return orestes_utils.getAttributeString(pt);
-    });
-    var result = [];
-    _.each(grouped, function(points, rowKey) {
-        result.push({
-            tags: _.omit(points[0], 'time', 'value'),
-            points: points.map(function(pt) {
-                return [new Date(pt.time).getTime(), pt.value];
-            })
-        });
-    });
-
-    return result;
-}
-
-function write(points) {
-    if (!Array.isArray(points)) { points = [points]; }
-    var write_url = BASE_URL + 'write';
-    return request.postAsync({
-        url: write_url,
-        json: points
-    })
-    .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
-        return body;
-    });
-}
-
-function read(query, start, end) {
-    var read_url = BASE_URL + 'read';
-    return request.postAsync({
-        url: read_url,
-        json : {
-            query: query || ES_MATCH_ALL,
-            start: start || 0,
-            end: end || Date.now()
-        }
-    })
-    .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
-        return body;
-    });
-}
-
-function read_series(query) {
-    var series_url = BASE_URL + 'series';
-
-    return request.postAsync({
-        url: series_url,
-        json: {
-            query: query || ES_MATCH_ALL,
-            start: 0,
-            end: Date.now()
-        }
-    })
-    .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
-        return body;
-    });
-}
-
-function select_distinct(keys, query) {
-    var select_distinct_url = BASE_URL + 'select_distinct';
-
-    return request.postAsync({
-        url: select_distinct_url,
-        json: {
-            keys: keys,
-            query: query || ES_MATCH_ALL
-        }
-    })
-    .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
-        return body;
-    });
-}
-
-function remove(space) {
-    var delete_url = BASE_URL + 'delete';
-    return request.postAsync({
-        url: delete_url,
-        json: {
-            space: space,
-            keep_days: 0
-        }
-    })
-    .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
-    });
-}
-
-function verify_import(points, query, expected) {
-    return retry(function() {
-        return read(query)
-            .then(function(result) {
-                expect(result).deep.equal(seriesFromPoints(expected || points));
-            });
-    });
-}
-
-function buildAttrString(d) {
-    var keys = _.keys(d).sort();
-    var strs = _.map(keys, function(key) {
-        return key + '=' + d[key];
-    });
-    return strs.join(',');
-}
 
 describe('Orestes', function() {
     this.timeout(30000);
-
-    before(function() {
-        return remove('default');
-    });
 
     describe('basic functionality', function() {
         function write_read_delete_test(points, query, expected, space) {
@@ -140,9 +28,13 @@ describe('Orestes', function() {
                     return verify_import(points, query, expected);
                 })
                 .then(function() {
-                    return remove(space);
+                    return test_utils.remove(space);
                 });
         }
+
+        before(function() {
+            return test_utils.remove('default');
+        });
 
         it('writes and reads a single point', function() {
             var one_point = test_utils.generate_sample_data({count: 1});
@@ -204,33 +96,8 @@ describe('Orestes', function() {
     });
 
     describe('count', function() {
-        function count(query, start, end) {
-            var count_url = BASE_URL + 'read';
-            return request.postAsync({
-                url: count_url,
-                json : {
-                    query: query || ES_MATCH_ALL,
-                    start: start || 0,
-                    end: end || Date.now(),
-                    aggregations: [{
-                        type: 'count'
-                    }]
-                }
-            })
-            .spread(function(res, body) {
-                expect(res.statusCode).equal(200);
-                return body;
-            });
-        }
-
-        function sortSeries(serieses) {
-            return _.sortBy(serieses, function(series) {
-                return buildAttrString(series.tags);
-            });
-        }
-
-        function countsFromPoints(points) {
-            var serieses = seriesFromPoints(points);
+        function counts_from_points(points) {
+            var serieses = test_utils.series_from_points(points);
             serieses.forEach(function(series) {
                 series.count = series.points.length;
                 delete series.points;
@@ -256,31 +123,31 @@ describe('Orestes', function() {
         });
 
         after(function() {
-            return remove('default');
+            return test_utils.remove('default');
         });
 
         it('all points', function() {
-            return count()
+            return test_utils.count()
                 .then(function(result) {
-                    var received = sortSeries(result);
-                    var expected = sortSeries(countsFromPoints(points));
+                    var received = sort_series(result);
+                    var expected = sort_series(counts_from_points(points));
 
                     expect(received).deep.equal(expected);
                 });
         });
 
         it('with filter', function() {
-            return count({
+            return test_utils.count({
                 term: {
                     host: 'a'
                 }
             })
             .then(function(result) {
-                var expected = sortSeries(countsFromPoints(points.filter(function(pt) {
+                var expected = sort_series(counts_from_points(points.filter(function(pt) {
                     return pt.host === 'a';
                 })));
 
-                var received = sortSeries(result);
+                var received = sort_series(result);
 
                 expect(received).deep.equal(expected);
             });
@@ -310,11 +177,11 @@ describe('Orestes', function() {
                     return verify_import(points, name_filter);
                 })
                 .then(function() {
-                    return count(name_filter);
+                    return test_utils.count(name_filter);
                 })
                 .then(function(result) {
-                    var expected = sortSeries(countsFromPoints(points));
-                    var received = sortSeries(result);
+                    var expected = sort_series(counts_from_points(points));
+                    var received = sort_series(result);
 
                     expect(received).deep.equal(expected);
                 });
@@ -359,8 +226,8 @@ describe('Orestes', function() {
     describe('metadata queries', function() {
         function get_streams(data) {
             return _.chain(data)
-                .sortBy(buildAttrString)
-                .uniq(buildAttrString, true)
+                .sortBy(build_attr_string)
+                .uniq(build_attr_string, true)
                 .value();
         }
 
@@ -381,13 +248,13 @@ describe('Orestes', function() {
         });
 
         after(function() {
-            return remove('default');
+            return test_utils.remove('default');
         });
 
         it('/series', function() {
-            return read_series()
+            return test_utils.read_series()
                 .then(function(result) {
-                    var received = _.sortBy(result, buildAttrString);
+                    var received = _.sortBy(result, build_attr_string);
                     var expected = get_streams(points.map(function(pt) {
                         return _.omit(pt, 'time', 'value');
                     }));
@@ -414,7 +281,7 @@ describe('Orestes', function() {
                     var expected = get_streams(points.map(function(pt) {
                         return {host: pt.host, pop: pt.pop};
                     }));
-                    var received = _.sortBy(result, buildAttrString);
+                    var received = _.sortBy(result, build_attr_string);
 
                     expect(received).deep.equal(expected);
                 });

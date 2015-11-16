@@ -134,10 +134,11 @@ OrestesInserter.prototype.insert_metadata = function() {
             var items = JSON.parse(body).items;
             for (var i = 0; i < items.length; i++) {
                 var item = items[i];
-                if (item.create.status !== ES_SUCCESSFUL_CREATE_CODE && item.create.status !== ES_DOCUMENT_EXISTS_CODE) {
+                var create = item.create;
+                if (!create || create.status !== ES_SUCCESSFUL_CREATE_CODE && create.status !== ES_DOCUMENT_EXISTS_CODE) {
                     var failed_metadatum = JSON.parse(self.metadata[i]);
                     self.bubo.remove_point(self.space + '@' + self.buckets[i], failed_metadatum);
-                    self.errors.push({pt: failed_metadatum, error: item.create.error});
+                    self.errors.push({pt: failed_metadatum, error: create ? create.error : 'unknown'});
                 }
             }
         })

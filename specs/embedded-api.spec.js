@@ -1,0 +1,117 @@
+var Promise = require('bluebird');
+var retry = require('bluebird-retry');
+var expect = require('chai').expect;
+
+var test_utils = require('./orestes-test-utils');
+var sort_series = test_utils.sort_series;
+var series_from_points = test_utils.series_from_points;
+var Orestes = require('../src/orestes');
+
+describe('embedded Orestes API', function() {
+    this.timeout(30000);
+
+    before(function() {
+        var config = {
+            port: 9668,
+            cassandra: {
+                host: '127.94.0.1',
+                native_transport_port: 9042
+            },
+            elasticsearch: {
+                host: 'localhost',
+                port: 9200
+            },
+            spaces: {
+                default:
+                    {
+                        retention_days: -1,
+                        table_granularity_days: 1
+                    }
+                }
+        };
+
+        return Orestes.startup(config);
+    });
+
+    describe('read', function() {
+        var points = test_utils.generate_sample_data({
+            start: Date.now() - 1000,
+            count: 1000,
+            tags: {
+                host: ['a', 'b', 'c'],
+                pop: ['d', 'e', 'f', 'g'],
+                bananas: ['one', 'two', 'three', 'four', 'five']
+            }
+        });
+
+        var expected = sort_series(series_from_points(points));
+
+        before(function() {
+            return test_utils.write(points)
+                .then(function() {
+                    return test_utils.verify_import(points);
+                });
+        });
+
+        after(function() {
+            return test_utils.remove('default');
+        });
+
+        it('embedded API', function() {
+            var all_fetchers = [];
+            function process_series(fetcher) {
+                all_fetchers.push(fetcher);
+            }
+
+            return Orestes.read({match_all: {}}, 'default', 0, Date.now(), process_series)
+            .then(function() {
+                expect(all_fetchers.length).equal(expected.length);
+                return Promise.map(all_fetchers, function loop(fetcher) {
+                    fetcher.points = fetcher.points || [];
+                    return fetcher.fetch(2)
+                        .then(function(result) {
+                            expect(result.points.length <= 2).equal(true);
+                            fetcher.points = fetcher.points.concat(result.points);
+                            if (!result.eof) {
+                                return loop(fetcher);
+                            }
+                        });
+                });
+            })
+            .then(function() {
+                var received = sort_series(all_fetchers.map(function(fetcher) {
+                    return {tags: fetcher.tags, points: fetcher.points};
+                }));
+
+                expect(received).deep.equal(expected);
+            });
+        });
+    });
+
+    describe('write', function() {
+        after(function() {
+            return test_utils.remove('default');
+        });
+
+        it('embedded API', function() {
+            var points = test_utils.generate_sample_data({
+                start: Date.now() - 1000,
+                count: 1000,
+                tags: {
+                    type: ['write_test'],
+                    host: ['a', 'b', 'c'],
+                    pop: ['d', 'e', 'f', 'g'],
+                    bananas: ['one', 'two', 'three', 'four', 'five']
+                }
+            });
+
+            return Orestes.write(points, 'default')
+                .then(function(result) {
+                    expect(result.errors).deep.equal([]);
+                    return retry(function() {
+                        return test_utils.verify_import(points);
+                    });
+                });
+        });
+    });
+});

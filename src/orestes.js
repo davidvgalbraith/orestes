@@ -38,20 +38,24 @@ function _connect_to_elasticsearch(config) {
     return elasticsearch.startup();
 }
 
-function startup(config) {
+function init(config) {
+    Elasticsearch.init(config);
     cassandra_client = new CassandraClient(config.cassandra);
+    var bubo_cache = new Bubo(utils.buboOptions);
 
+    Query.init(config);
+    Delete.init(config, cassandra_client);
+    Insert.init(config, bubo_cache, cassandra_client);
+    utils.init(config, cassandra_client, bubo_cache);
+}
+
+function startup(config) {
+    init(config);
     return Promise.all([
         _connect_to_cassandra(config),
         _connect_to_elasticsearch(config)
     ])
     .then(function() {
-        var bubo_cache = new Bubo(utils.buboOptions);
-
-        Query.init(config);
-        Delete.init(config, cassandra_client);
-        Insert.init(config, bubo_cache, cassandra_client);
-        utils.init(config, cassandra_client, bubo_cache);
         return _init_routes(config);
     });
 }
@@ -226,11 +230,13 @@ if (process.env.MAIN || require.main === module) {
 }
 
 module.exports = {
+    init: init,
     startup: startup,
     remove: Delete.remove,
 
+    write: Insert.insert,
+    read: Query.read,
     count_points: Query.count_points,
-    get_metric_streams: Query.get_metric_streams,
     get_stream_list: Query.get_stream_list,
     get_stream_list_opt: Query.get_stream_list_opt
 };

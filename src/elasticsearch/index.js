@@ -18,8 +18,6 @@ var Electra = Base.extend({
             hostname: config.elasticsearch.host,
             port: config.elasticsearch.port
         });
-
-        query.init(config);
     },
 
     _connect_to_es: function() {
@@ -54,6 +52,11 @@ var Electra = Base.extend({
             self.logger.error('error validating elasticsearch:', err.message);
             throw err;
         });
+    },
+},
+{
+    init: function(config) {
+        query.init(config);
     }
 });
 

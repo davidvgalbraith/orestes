@@ -1,5 +1,7 @@
-var Bubo = require('./index');
+var _ = require('underscore');
 var expect = require('chai').expect;
+
+var Bubo = require('./index');
 var orestes_utils = require('../orestes-utils');
 var util = require('util');
 var logger = require('logger').get('bubo-tests');
@@ -11,6 +13,14 @@ var result = {};
 function lookup(bubo, bucket, point) {
     bubo.lookup_point(bucket, point, result);
     return result;
+}
+
+function buildAttrString(d) {
+    var keys = _.keys(d).sort();
+    var strs = _.map(keys, function(key) {
+        return key + '=' + d[key];
+    });
+    return strs.join(',');
 }
 
 describe('bubo', function() {
@@ -41,11 +51,10 @@ describe('bubo', function() {
             time2: new Date(),
             value: 100,
             value2: 100,
-            value3: 100.999,
-            source_type: 'metric',
+            value3: 100.999
         };
 
-        var expected = orestes_utils.getAttributeString(pt);
+        var expected = buildAttrString(_.omit(pt, 'time', 'value'));
 
         // Lookup in different space-buckets combinations.
         // The 'found' should be false when the space-bucket is called first time.
@@ -194,11 +203,11 @@ describe('bubo', function() {
         s1 = {};
         bubo.stats(s1);
 
-        expect(s1.strings_table.num_tags).equal(6); // 9 attributes. ignoring time, value, and source_type, 6.
+        expect(s1.strings_table.num_tags).equal(7); // 9 attributes. ignoring time and value, 7.
         expect(s1.strings_table.pop).equal(1);
         expect(s1['spc@bkt'].attr_entries).equal(1);
         expect(s1['spc@bkt'].blob_allocated_bytes).equal(20971520); //20MB default size
-        expect(s1['spc@bkt'].blob_used_bytes).equal(13); // 1 byte for size, 6 x 2 bytes since all small numbers.
+        expect(s1['spc@bkt'].blob_used_bytes).equal(15); // 1 byte for size, 7 x 2 bytes since all small numbers.
 
         // [2] another point that reuses some strings.
         pt = {
@@ -209,12 +218,12 @@ describe('bubo', function() {
         s1 = {};
         bubo.stats(s1);
 
-        expect(s1.strings_table.num_tags).equal(6); // no new tags. should be same.
+        expect(s1.strings_table.num_tags).equal(7); // no new tags. should be same.
         expect(s1.strings_table.name).equal(2);
         expect(s1.strings_table.pop).equal(2);
         expect(s1['spc@bkt'].attr_entries).equal(2);
         expect(s1['spc@bkt'].blob_allocated_bytes).equal(20971520); //20MB default size
-        expect(s1['spc@bkt'].blob_used_bytes).equal(18); // 1 byte for size + 2 x 2 bytes = 5. already have 13, so total 18.
+        expect(s1['spc@bkt'].blob_used_bytes).equal(20); // 1 byte for size + 2 x 2 bytes = 5. already have 15, so total 20.
     });
 
 

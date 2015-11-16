@@ -57,8 +57,8 @@ function count_points(es_filter, space, startMs, endMs, process_series) {
     var msInWeek = granularity * msInDay;
     var startDay = Math.floor(startMs / msInDay);
     var endDay = Math.floor(endMs / msInDay);
-    var firstWeek = utils.roundToGranularity(startDay);
-    var lastWeek = utils.roundToGranularity(endDay);
+    var firstWeek = utils.roundToGranularity(startDay, space);
+    var lastWeek = utils.roundToGranularity(endDay, space);
 
     function count_doc_callback(docs) {
         return Promise.map(docs, function count_points_if_new_stream(doc) {
@@ -162,7 +162,7 @@ function _get_days(space, startMs, endMs) {
         endDay -= 1;
     }
 
-    var startDay = utils.roundToGranularity(Math.floor(startMs / msInDay));
+    var startDay = utils.roundToGranularity(Math.floor(startMs / msInDay), space);
 
     return _.range(startDay, endDay+1, space_info[space].table_granularity_days);
 }
