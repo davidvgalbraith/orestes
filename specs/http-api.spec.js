@@ -129,7 +129,7 @@ describe('Orestes', function() {
         it('all points', function() {
             return test_utils.count()
                 .then(function(result) {
-                    var received = sort_series(result);
+                    var received = sort_series(result.series);
                     var expected = sort_series(counts_from_points(points));
 
                     expect(received).deep.equal(expected);
@@ -147,7 +147,7 @@ describe('Orestes', function() {
                     return pt.host === 'a';
                 })));
 
-                var received = sort_series(result);
+                var received = sort_series(result.series);
 
                 expect(received).deep.equal(expected);
             });
@@ -181,7 +181,7 @@ describe('Orestes', function() {
                 })
                 .then(function(result) {
                     var expected = sort_series(counts_from_points(points));
-                    var received = sort_series(result);
+                    var received = sort_series(result.series);
 
                     expect(received).deep.equal(expected);
                 });
@@ -254,7 +254,7 @@ describe('Orestes', function() {
         it('/series', function() {
             return test_utils.read_series()
                 .then(function(result) {
-                    var received = _.sortBy(result, build_attr_string);
+                    var received = _.sortBy(result.series, build_attr_string);
                     var expected = get_streams(points.map(function(pt) {
                         return _.omit(pt, 'time', 'value');
                     }));
@@ -284,6 +284,35 @@ describe('Orestes', function() {
                     var received = _.sortBy(result, build_attr_string);
 
                     expect(received).deep.equal(expected);
+                });
+        });
+    });
+
+    describe('limits', function() {
+        var points = test_utils.generate_sample_data({
+            count: 1000,
+            tags: {
+                host: ['a', 'b', 'c'],
+                pop: ['d', 'e', 'f', 'g'],
+                bananas: ['one', 'two', 'three', 'four', 'five']
+            }
+        });
+
+        before(function() {
+            return write(points)
+                .then(function() {
+                    return verify_import(points);
+                });
+        });
+
+        after(function() {
+            return test_utils.remove('default');
+        });
+
+        it('errors if you try to read from more than series_limit series', function() {
+            return test_utils.read(null, 0, Date.now(), {series_limit: 10})
+                .then(function(res) {
+                    expect(res.error).equal('query matched more than 10 series');
                 });
         });
     });

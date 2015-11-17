@@ -95,18 +95,22 @@ function write(points) {
     });
 }
 
-function read(query, start, end) {
+function read(query, start, end, options) {
+    options = options || {};
     var read_url = BASE_URL + 'read';
     return request.postAsync({
         url: read_url,
         json : {
             query: query || ES_MATCH_ALL,
             start: start || 0,
-            end: end || Date.now()
+            end: end || Date.now(),
+            series_limit: options.series_limit
         }
     })
     .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
+        if (res.statusCode !== 200) {
+            throw new Error(JSON.stringify(body));
+        }
         return body;
     });
 }
@@ -116,7 +120,7 @@ function verify_import(points, query, expected) {
     return retry(function() {
         return read(query)
             .then(function(result) {
-                expect(sort_series(result)).deep.equal(expected);
+                expect(sort_series(result.series)).deep.equal(expected);
             });
     });
 }
@@ -188,6 +192,7 @@ function count(query, start, end) {
 }
 
 module.exports = {
+    read: read,
     write: write,
     verify_import: verify_import,
     series_from_points: series_from_points,

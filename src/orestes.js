@@ -3,6 +3,7 @@ var fse = Promise.promisifyAll(require('fs-extra'));
 var express = require('express');
 var body_parser = require('body-parser');
 var Long = require('long');
+var util = require('util');
 var retry = require('bluebird-retry');
 var error_handler = require('./middleware/error-handler');
 var CassandraClient = require('./cassandra').client;
@@ -80,11 +81,15 @@ function _init_routes(config) {
         var es_filter = req.body.query;
         var startMs = new Date(req.body.start).getTime();
         var endMs = new Date(req.body.end).getTime();
+        var options = {
+            series_limit: req.body.series_limit,
+            points_limit: req.body.points_limit
+        };
 
         var first = true;
+        res.write('{"series":[');
         function write_series(series) {
             if (first) {
-                res.write('[');
                 first = false;
             } else {
                 res.write(',');
@@ -146,15 +151,16 @@ function _init_routes(config) {
                 return next(err);
             }
         } else {
-            read_promise = Query.read(es_filter, space, startMs, endMs, fetch_series);
+            read_promise = Query.read(es_filter, space, startMs, endMs, options, fetch_series);
         }
 
         return read_promise
             .then(function() {
-                res.end(']');
+                res.end(']}');
             })
             .catch(function(err) {
-                return next(err);
+                var terminator = util.format('], "error": "%s"}', err.message);
+                res.end(terminator);
             });
     });
 
@@ -164,7 +170,7 @@ function _init_routes(config) {
         var startMs = new Date(req.body.start).getTime();
         var endMs = new Date(req.body.end).getTime();
 
-        res.write('[');
+        res.write('{"series":[');
         var first = true;
         function process_streams(streams) {
             if (first) {
@@ -181,10 +187,11 @@ function _init_routes(config) {
 
         return Query.get_stream_list(es_filter, space, startMs, endMs, process_streams)
             .then(function() {
-                res.end(']');
+                res.end(']}');
             })
             .catch(function(err) {
-                return next(err);
+                var terminator = util.format('], "error": "%s"}', err.message);
+                res.end(terminator);
             });
     });
 
