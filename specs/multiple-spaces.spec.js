@@ -30,11 +30,9 @@ describe('embedded Orestes API', function() {
             },
             spaces: {
                 default: {
-                    retention_days: -1,
                     table_granularity_days: 1
                 },
                 other: {
-                    retention_days: -1,
                     table_granularity_days: 7
                 }
             }
