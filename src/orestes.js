@@ -18,6 +18,9 @@ var Bubo = require('./bubo');
 
 var cassandra_client;
 var SUCCESS = 200;
+var ES_MATCH_ALL = {
+    match_all: {}
+};
 
 function _connect_to_cassandra(config) {
     var cass_params = {
@@ -78,8 +81,8 @@ function _init_routes(config) {
 
     app.post('/read/:space*?', body_parser.json(), function read(req, res, next) {
         var space = req.params.space || 'default';
-        var es_filter = req.body.query;
-        var startMs = new Date(req.body.start).getTime();
+        var es_filter = req.body.query || ES_MATCH_ALL;
+        var startMs = new Date(req.body.start || 0).getTime();
         var endMs = new Date(req.body.end).getTime();
         var options = {
             series_limit: req.body.series_limit,
@@ -166,8 +169,8 @@ function _init_routes(config) {
 
     app.post('/series/:space*?', body_parser.json(), function streams(req, res, next) {
         var space = req.params.space || 'default';
-        var es_filter = req.body.query;
-        var startMs = new Date(req.body.start).getTime();
+        var es_filter = req.body.query || ES_MATCH_ALL;
+        var startMs = new Date(req.body.start || 0).getTime();
         var endMs = new Date(req.body.end).getTime();
 
         res.write('{"series":[');
@@ -198,7 +201,7 @@ function _init_routes(config) {
     app.post('/select_distinct/:space*?', body_parser.json(), function select_distinct(req, res, next) {
         var space = req.params.space || 'default';
         var keys = req.body.keys;
-        var es_filter = req.body.query;
+        var es_filter = req.body.query || ES_MATCH_ALL;
 
         return Query.select_distinct(es_filter, space, keys)
             .then(function(result) {
