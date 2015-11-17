@@ -2,6 +2,8 @@ var Promise = require('bluebird');
 var _ = require('underscore');
 var request = Promise.promisifyAll(require('request'));
 var expect = require('chai').expect;
+var oboe = require('oboe');
+
 var orestes_utils = require('../src/orestes-utils');
 
 var test_utils = require('./orestes-test-utils');
@@ -314,6 +316,51 @@ describe('Orestes', function() {
                 .then(function(res) {
                     expect(res.error).equal('query matched more than 10 series');
                 });
+        });
+    });
+
+    describe('streaming', function() {
+        var points = test_utils.generate_sample_data({
+            count: 1000,
+            tags: {
+                host: ['a', 'b', 'c'],
+                pop: ['d', 'e', 'f', 'g'],
+                bananas: ['one', 'two', 'three', 'four', 'five']
+            }
+        });
+
+        before(function() {
+            return write(points)
+                .then(function() {
+                    return verify_import(points);
+                });
+        });
+
+        after(function() {
+            return test_utils.remove('default');
+        });
+
+        it('streams series as soon as they\'re available', function(done) {
+            var invocations = 0;
+            oboe({
+                method: 'POST',
+                url: 'http://localhost:9668/read',
+            })
+            .node('series.*', function(series) {
+                invocations++;
+                expect(series.points).to.exist;
+                expect(series.tags).to.exist;
+            })
+            .done(function(result) {
+                try {
+                    var expected = sort_series(test_utils.series_from_points(points));
+                    expect(invocations).equal(expected.length);
+                    expect(sort_series(result.series)).deep.equal(expected);
+                    done();
+                } catch (err) {
+                    done(err);
+                }
+            });
         });
     });
 });

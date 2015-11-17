@@ -83,7 +83,7 @@ function _init_routes(config) {
         var space = req.params.space || 'default';
         var es_filter = req.body.query || ES_MATCH_ALL;
         var startMs = new Date(req.body.start || 0).getTime();
-        var endMs = new Date(req.body.end).getTime();
+        var endMs = new Date(req.body.end || Date.now()).getTime();
         var options = {
             series_limit: req.body.series_limit,
             points_limit: req.body.points_limit
@@ -162,6 +162,7 @@ function _init_routes(config) {
                 res.end(']}');
             })
             .catch(function(err) {
+                logger.error(err.stack);
                 var terminator = util.format('], "error": "%s"}', err.message);
                 res.end(terminator);
             });
@@ -171,7 +172,7 @@ function _init_routes(config) {
         var space = req.params.space || 'default';
         var es_filter = req.body.query || ES_MATCH_ALL;
         var startMs = new Date(req.body.start || 0).getTime();
-        var endMs = new Date(req.body.end).getTime();
+        var endMs = new Date(req.body.end || Date.now()).getTime();
 
         res.write('{"series":[');
         var first = true;
@@ -193,6 +194,7 @@ function _init_routes(config) {
                 res.end(']}');
             })
             .catch(function(err) {
+                logger.error(err.stack);
                 var terminator = util.format('], "error": "%s"}', err.message);
                 res.end(terminator);
             });
