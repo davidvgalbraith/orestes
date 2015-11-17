@@ -346,7 +346,7 @@ function read(es_filter, space, startMs, endMs, options, process_series) {
     var total_series = 0;
 
     function es_document_callback(docs) {
-        return Promise.each(docs, function read_points_if_new_stream(doc) {
+        return Promise.map(docs, function read_points_if_new_stream(doc) {
             bubo.lookup_point(space_bucket, doc._source, buboResult);
             if (!buboResult.found) {
                 return buildFetcher(doc, space, 'select', startMs, endMs, validDays)
@@ -358,7 +358,7 @@ function read(es_filter, space, startMs, endMs, options, process_series) {
                         return process_series(fetcher);
                     });
             }
-        });
+        }, {concurrency: space_info[space].read_request_concurrency || 200});
     }
 
     return get_valid_days(space)
