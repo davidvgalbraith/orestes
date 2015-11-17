@@ -227,7 +227,7 @@ function stream_metadata(es_filter, space, startMs, endMs, es_document_callback)
             };
         }
 
-        logger.info('executing', url, JSON.stringify(body, null, 2));
+        logger.debug('executing', url, JSON.stringify(body, null, 2));
 
         return es_query.execute(url, body, 'GET');
     })
@@ -322,7 +322,7 @@ function get_stream_list_opt(es_filter, space, aggregations) {
         };
     }
 
-    logger.info('streams query body', JSON.stringify(body, null, 2));
+    logger.debug('streams query body', JSON.stringify(body, null, 2));
     return es_query.execute(url, body, 'GET')
     .then(function(response) {
         var points = aggregation.values_from_es_aggr_resp(response, aggregations);
