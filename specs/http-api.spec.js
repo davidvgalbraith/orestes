@@ -23,9 +23,9 @@ describe('Orestes', function() {
     describe('basic functionality', function() {
         function write_read_delete_test(points, query, expected, space) {
             space = space || 'default';
-            return write(points)
+            return write(points, space)
                 .then(function() {
-                    return verify_import(points, query, expected);
+                    return verify_import(points, space, query, expected);
                 })
                 .then(function() {
                     return test_utils.remove(space);
@@ -174,7 +174,7 @@ describe('Orestes', function() {
 
             return write(points)
                 .then(function() {
-                    return verify_import(points, name_filter);
+                    return verify_import(points, 'default', name_filter);
                 })
                 .then(function() {
                     return test_utils.count(name_filter);
@@ -310,7 +310,7 @@ describe('Orestes', function() {
         });
 
         it('errors if you try to read from more than series_limit series', function() {
-            return test_utils.read(null, 0, Date.now(), {series_limit: 10})
+            return test_utils.read(null, 'default', 0, Date.now(), {series_limit: 10})
                 .then(function(res) {
                     expect(res.error).equal('query matched more than 10 series');
                 });

@@ -82,9 +82,12 @@ function series_from_points(points) {
     return result;
 }
 
-function write(points) {
+function write(points, space) {
     if (!Array.isArray(points)) { points = [points]; }
     var write_url = BASE_URL + 'write';
+    if (space) {
+        write_url += '/' + space;
+    }
     return request.postAsync({
         url: write_url,
         json: points
@@ -95,9 +98,12 @@ function write(points) {
     });
 }
 
-function read(query, start, end, options) {
+function read(query, space, start, end, options) {
     options = options || {};
     var read_url = BASE_URL + 'read';
+    if (space) {
+        read_url += '/' + space;
+    }
     return request.postAsync({
         url: read_url,
         json : {
@@ -115,10 +121,10 @@ function read(query, start, end, options) {
     });
 }
 
-function verify_import(points, query, expected) {
+function verify_import(points, space, query, expected) {
     expected = sort_series(series_from_points(expected || points));
     return retry(function() {
-        return read(query)
+        return read(query, space)
             .then(function(result) {
                 expect(sort_series(result.series)).deep.equal(expected);
             });
@@ -191,6 +197,10 @@ function count(query, start, end) {
     });
 }
 
+function clear_spaces(spaces) {
+    return Promise.map(spaces, remove);
+}
+
 module.exports = {
     read: read,
     write: write,
@@ -201,6 +211,7 @@ module.exports = {
     select_distinct: select_distinct,
     count: count,
     remove: remove,
+    clear_spaces: clear_spaces,
     generate_sample_data: generate_sample_data,
     build_attr_string: build_attr_string
 };

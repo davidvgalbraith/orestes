@@ -27,12 +27,11 @@ describe('embedded Orestes API', function() {
                 port: 9200
             },
             spaces: {
-                default:
-                    {
-                        retention_days: -1,
-                        table_granularity_days: 1
-                    }
+                default: {
+                    retention_days: -1,
+                    table_granularity_days: 1
                 }
+            }
         };
 
         return Orestes.startup(config);
