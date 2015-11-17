@@ -29,7 +29,7 @@ var table_options = {
     default_time_to_live: 0,
     speculative_retry: 'NONE',
     memtable_flush_period_in_ms: 0,
-    compaction: {class: 'SizeTieredCompactionStrategy', cold_reads_to_omit: 0.0},
+    compaction: {class: 'SizeTieredCompactionStrategy'},
     compression: {sstable_compression: 'LZ4Compressor'}
 };
 

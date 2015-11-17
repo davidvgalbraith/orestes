@@ -23,7 +23,11 @@ var _ALL_FAILED_PATTERN = /SearchPhaseExecutionException\[Failed to execute phas
 var _MISSING_CONTEXT_PATTERN = /SearchContextMissingException\[No search context found/;
 var _SCRIPT_MISSING_PATTERN = /Unable to find on disk script/;
 
-function categorize_error(str) {
+function categorize_error(error) {
+    var str = error && error.root_cause && error.root_cause[0] && error.root_cause[0].reason;
+    if (!str) {
+        return null;
+    }
     var match = str.match(_ES_EXCEPTION_PATTERN);
     if (match) {
         return new ElasticsearchException(match[1]);
