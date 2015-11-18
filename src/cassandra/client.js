@@ -10,7 +10,7 @@ var types = cassandra.types;
 
 var logger = Logger.get('cassandra-driver');
 // these log messages are spammy and meaningless, so let's not print them
-var IGNORED_LOG_REGEX = /had the following error on startup: 'Unable to connect'|Lost connection on host|Creating 1 IO worker threads|Connect error 'connection refused' on host/;
+var IGNORED_LOG_REGEX = /had the following error on startup: 'Unable to connect'|Lost connection on host|Creating 1 IO worker threads|Connect error 'connection refused' on host|Unable to find key column 'key' in prepared query/;
 
 // Mapping from cassandra log levels to jut log levels
 var levelmap = {
