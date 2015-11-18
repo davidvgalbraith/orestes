@@ -4,7 +4,7 @@ var request = Promise.promisifyAll(require('request'));
 var url = require('url');
 var retry = require('bluebird-retry');
 
-var Logger = require('logger');
+var Logger = require('../../logger');
 
 var query = require('./query');
 var aggregation = require('./aggregation');

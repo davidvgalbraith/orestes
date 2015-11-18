@@ -11,7 +11,7 @@ var aggregation = require('./elasticsearch/aggregation');
 var Bubo = require('./bubo');
 var electra_utils = require('./elasticsearch/utils');
 
-var logger = require('logger').get('orestes');
+var logger = require('../logger').get('orestes');
 var msInDay = 1000 * 60 * 60 * 24;
 
 var es_url, METADATA_FETCH_SIZE_FOR_COUNT;

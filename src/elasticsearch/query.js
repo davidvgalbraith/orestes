@@ -3,10 +3,9 @@ var _ = require('underscore');
 var Promise = require('bluebird');
 var request = Promise.promisifyAll(require('request'));
 
-var JuttleMoment = require('juttle-moment').JuttleMoment;
 var errors = require('./es-errors');
 
-var Logger = require('logger');
+var Logger = require('../../logger');
 var logger = Logger.get('elasticsearch');
 
 var es_config;
@@ -62,32 +61,6 @@ function _build_url(prefix, space, dates, suffix, parameters) {
     }
 
     return 'http://' + es_config.host + ':' + es_config.port + '/' + path;
-}
-
-function getTimeIndices(from, to) {
-    var maxDays = JuttleMoment.duration(14, 'day');
-
-    to = to || new JuttleMoment();
-
-    if (from === null || JuttleMoment.add(from, maxDays).lt(to)) {
-        return ['*'];
-    }
-
-    var day = JuttleMoment.duration(1, 'day');
-
-    var strings = [];
-
-    var current = from.quantize(JuttleMoment.duration(1, 'day'));
-    var max = to.quantize(JuttleMoment.duration(1, 'day'));
-
-    while (current.lte(max)) {
-        // Push only the first part of the ISO string (e.g. 2014-01-01).
-        strings.push(current.valueOf().substr(0, 10).replace(/-/g, '.'));
-
-        current = JuttleMoment.add(current, day);
-    }
-
-    return strings;
 }
 
 function execute(url, body, method, options) {

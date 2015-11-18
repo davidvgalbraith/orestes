@@ -1,7 +1,7 @@
 
 var _ = require('underscore');
 
-var Logger = require('logger');
+var Logger = require('../../logger');
 var logger = Logger.get('elasticsearch');
 
 // build a bucketed aggregation that groups by the given list of

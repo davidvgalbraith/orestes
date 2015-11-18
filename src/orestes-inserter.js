@@ -5,7 +5,7 @@ var utils = require('./orestes-utils');
 var valueCode = OrestesSettings.value_type.code;
 var string = OrestesSettings.string_type;
 var int = OrestesSettings.int_type;
-var logger = require('logger').get('orestes-inserter');
+var logger = require('../logger').get('orestes-inserter');
 var cass_errors = require('./cassandra').errors;
 
 var cassandra_client, bubo, es_url, space_info;

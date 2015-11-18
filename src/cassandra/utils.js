@@ -5,7 +5,7 @@ var util = require('util');
 var errors = require('./cassandra-errors');
 var valid_space = /^[\w]+$/;
 
-var logger = require('logger').get('cassandra-utils');
+var logger = require('../../logger').get('cassandra-utils');
 
 var cassandra_client, prepareds;
 

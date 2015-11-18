@@ -2,7 +2,7 @@ var Promise = require('bluebird');
 var request = Promise.promisifyAll(require('request'));
 var retry = require('bluebird-retry');
 
-var logger = require('logger').get('elasticsearch-delete');
+var logger = require('../../logger').get('elasticsearch-delete');
 
 // takes an ES response blob and returns the _source fields augmented with the
 // source_type

@@ -13,7 +13,7 @@ var Query = require('./orestes-query');
 var Delete = require('./orestes-remover');
 var Insert = require('./orestes-inserter');
 var utils = require('./orestes-utils');
-var logger = require('logger').get('orestes');
+var logger = require('../logger').get('orestes');
 var Bubo = require('./bubo');
 
 var cassandra_client;

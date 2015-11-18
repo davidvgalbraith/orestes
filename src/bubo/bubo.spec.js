@@ -4,7 +4,7 @@ var expect = require('chai').expect;
 var Bubo = require('./index');
 var orestes_utils = require('../orestes-utils');
 var util = require('util');
-var logger = require('logger').get('bubo-tests');
+var logger = require('../../logger').get('bubo-tests');
 
 var options = orestes_utils.buboOptions;
 

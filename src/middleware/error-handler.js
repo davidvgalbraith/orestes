@@ -1,4 +1,4 @@
-var Logger = require('logger');
+var Logger = require('../../logger');
 
 var logger = Logger.get('error-handler');
 

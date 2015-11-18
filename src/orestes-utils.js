@@ -6,7 +6,7 @@ var metricsTableName = OrestesSettings.TABLE_NAME;
 var keyspacePrefix = OrestesSettings.KEYSPACE_PREFIX;
 var msInDay = 1000 * 60 * 60 * 24;
 var bubo;
-var logger = require('logger').get('orestes');
+var logger = require('../logger').get('orestes');
 
 var prepareds = {};
 var orestesTableConfig, space_info;
