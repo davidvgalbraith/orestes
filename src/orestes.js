@@ -86,7 +86,6 @@ function _init_routes(config) {
         var endMs = new Date(req.body.end || Date.now()).getTime();
         var options = {
             series_limit: req.body.series_limit,
-            points_limit: req.body.points_limit
         };
 
         var first = true;
