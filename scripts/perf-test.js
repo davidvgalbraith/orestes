@@ -2,13 +2,15 @@ var Promise = require('bluebird');
 var request = Promise.promisifyAll(require('request'));
 var _ = require('underscore');
 var util = require('util');
+var minimist = require('minimist');
 
-var NUM_POINTS = 100000;
-var WRITE_BATCH_SIZE = 500;
+var options = minimist(process.argv.slice(2));
+var NUM_POINTS = options.num_points || 100000;
+var WRITE_BATCH_SIZE = options.write_batch_size || 500;
 var NUM_WRITES = NUM_POINTS / WRITE_BATCH_SIZE;
 
-var NUM_TAGS = 3;
-var VALS_PER_TAG = 10;
+var NUM_TAGS = options.num_tags || 3;
+var VALS_PER_TAG = options.num_values || 10;
 
 function randInt(max) {
     return Math.floor(Math.random() * max);
