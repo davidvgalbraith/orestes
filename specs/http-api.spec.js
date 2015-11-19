@@ -15,12 +15,18 @@ var build_attr_string = test_utils.build_attr_string;
 
 var Orestes = require('../src/orestes');
 
-/* Assumes Orestes/Cassie/ES already running, Orestes at localhost:9668 */
-
 var msInDay = 1000 * 60 * 60 * 24;
 
 describe('Orestes', function() {
     this.timeout(30000);
+
+    before(function() {
+        return test_utils.start_orestes();
+    });
+
+    after(function() {
+        return test_utils.stop_orestes();
+    });
 
     describe('basic functionality', function() {
         function write_read_delete_test(points, query, expected, space) {

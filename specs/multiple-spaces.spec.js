@@ -21,7 +21,7 @@ describe('embedded Orestes API', function() {
         var config = {
             port: 9668,
             cassandra: {
-                host: '127.94.0.1',
+                host: '127.0.0.1',
                 native_transport_port: 9042
             },
             elasticsearch: {
@@ -38,10 +38,14 @@ describe('embedded Orestes API', function() {
             }
         };
 
-        return Orestes.startup(config)
+        return test_utils.start_orestes(config)
             .then(function() {
                 return test_utils.clear_spaces(['default', 'other']);
             });
+    });
+
+    after(function() {
+        return test_utils.stop_orestes();
     });
 
     describe('another space', function() {

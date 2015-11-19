@@ -17,6 +17,7 @@ var logger = require('../logger').get('orestes');
 var Bubo = require('./bubo');
 
 var cassandra_client;
+var listener;
 var SUCCESS = 200;
 var ES_MATCH_ALL = {
     match_all: {}
@@ -226,11 +227,15 @@ function _init_routes(config) {
     app.use(error_handler());
 
     return new Promise(function(resolve, reject) {
-        app.listen(config.port, function() {
+        listener = app.listen(config.port, function() {
             console.log('Orestes is online!');
             resolve();
         });
     });
+}
+
+function teardown() {
+    listener.close();
 }
 
 if (process.env.MAIN || require.main === module) {
@@ -243,11 +248,12 @@ if (process.env.MAIN || require.main === module) {
 module.exports = {
     init: init,
     startup: startup,
-    remove: Delete.remove,
+    teardown: teardown,
 
     write: Insert.insert,
     read: Query.read,
     count_points: Query.count_points,
     get_stream_list: Query.get_stream_list,
-    get_stream_list_opt: Query.get_stream_list_opt
+    get_stream_list_opt: Query.get_stream_list_opt,
+    remove: Delete.remove
 };

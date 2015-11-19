@@ -16,24 +16,11 @@ describe('embedded Orestes API', function() {
     this.timeout(30000);
 
     before(function() {
-        var config = {
-            port: 9668,
-            cassandra: {
-                host: '127.94.0.1',
-                native_transport_port: 9042
-            },
-            elasticsearch: {
-                host: 'localhost',
-                port: 9200
-            },
-            spaces: {
-                default: {
-                    table_granularity_days: 1
-                }
-            }
-        };
+        return test_utils.start_orestes();
+    });
 
-        return Orestes.startup(config);
+    after(function() {
+        return test_utils.stop_orestes();
     });
 
     describe('read', function() {

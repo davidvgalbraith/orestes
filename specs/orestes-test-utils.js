@@ -4,6 +4,8 @@ var request = Promise.promisifyAll(require('request'));
 var _ = require('underscore');
 var expect = require('chai').expect;
 
+var Orestes = require('../src/orestes');
+
 var BASE_URL = 'http://localhost:9668/';
 var ES_MATCH_ALL = {
     match_all: {}
@@ -201,7 +203,34 @@ function clear_spaces(spaces) {
     return Promise.map(spaces, remove);
 }
 
+function start_orestes(config) {
+    config = config || {
+        port: 9668,
+        cassandra: {
+            host: '127.0.0.1',
+            native_transport_port: 9042
+        },
+        elasticsearch: {
+            host: 'localhost',
+            port: 9200
+        },
+        spaces: {
+            default: {
+                table_granularity_days: 1
+            }
+        }
+    };
+
+    return Orestes.startup(config);
+}
+
+function stop_orestes() {
+    return Orestes.teardown();
+}
+
 module.exports = {
+    start_orestes: start_orestes,
+    stop_orestes: stop_orestes,
     read: read,
     write: write,
     verify_import: verify_import,
