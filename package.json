@@ -8,7 +8,7 @@
     "bluebird": "^2.9.30",
     "bluebird-retry": "^0.5.2",
     "body-parser": "^1.14.1",
-    "cassandra-native-driver": "^0.12.0",
+    "cassandra-native-driver": "^0.14.0",
     "chai": "^3.4.1",
     "express": "^4.13.3",
     "extendable-base": "^0.3.1",

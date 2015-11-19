@@ -25,7 +25,7 @@ var ES_MATCH_ALL = {
 
 function _connect_to_cassandra(config) {
     var cass_params = {
-        address: config.cassandra.host,
+        contactPoints: config.cassandra.host,
         port: config.cassandra.native_transport_port
     };
 

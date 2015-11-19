@@ -13,8 +13,8 @@ var MS_IN_DAY = 1000 * 60 * 60 * 24;
 var BATCH_SIZE = 100;
 var ES_SUCCESSFUL_CREATE_CODE = 201;
 var ES_DOCUMENT_EXISTS_CODE = 409;
-var preparedHints = {
-    hints: [string, int, valueCode]
+var param_types = {
+    param_types: [string, int, valueCode]
 };
 var buboResult = {};
 
@@ -67,7 +67,8 @@ OrestesInserter.prototype._push = function(pt) {
 
     var attrString = this.validate_and_handle_metadatum(pt, bucket);
 
-    this.active_batch.add_prepared(prepared, [attrString, offset, pt.value], preparedHints);
+    this.active_batch.add_prepared(prepared, [attrString, offset, pt.value], param_types);
+
     this.total++;
 
     if (this.total % BATCH_SIZE === 0) {
