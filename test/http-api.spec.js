@@ -4,7 +4,7 @@ var request = Promise.promisifyAll(require('request'));
 var expect = require('chai').expect;
 var oboe = require('oboe');
 
-var orestes_utils = require('../src/orestes-utils');
+var orestes_utils = require('../lib/orestes-utils');
 
 var test_utils = require('./orestes-test-utils');
 var sort_series = test_utils.sort_series;
@@ -13,7 +13,7 @@ var verify_import = test_utils.verify_import;
 var select_distinct = test_utils.select_distinct;
 var build_attr_string = test_utils.build_attr_string;
 
-var Orestes = require('../src/orestes');
+var Orestes = require('../lib/orestes');
 
 var msInDay = 1000 * 60 * 60 * 24;
 

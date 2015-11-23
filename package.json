@@ -2,7 +2,7 @@
   "name": "orestes",
   "version": "1.0.0",
   "description": "Searchable timeseries database built on Cassandra and Elasticsearch",
-  "main": "src/index.js",
+  "main": "lib/orestes.js",
   "dependencies": {
     "backbone": "^1.2.3",
     "bluebird": "^2.9.30",

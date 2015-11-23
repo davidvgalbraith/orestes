@@ -4,7 +4,7 @@ var request = Promise.promisifyAll(require('request'));
 var _ = require('underscore');
 var expect = require('chai').expect;
 
-var Orestes = require('../src/orestes');
+var Orestes = require('../lib/orestes');
 
 var BASE_URL = 'http://localhost:9668/';
 var ES_MATCH_ALL = {

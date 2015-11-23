@@ -13,7 +13,7 @@ Orestes depends on Cassandra 2.2.3 and Elasticsearch 2.0.0. You can [download](h
 
 Once the backends are running, Orestes needs to know the address and port to connect to them. Orestes reads this information from the "cassandra" and "elasticsearch" nested objects in `conf/orestes-config.json`. The provided defaults will connect to Cassandra and Elasticsearch processes running on localhost with their default ports, as they do if you download and run them with `download-backends.sh` and `run-backends.sh`. If you want to connect to a cluster elsewhere, you'll have to change the address and host in `orestes-config.json`.
 
-Once `orestes-config.json` is looking good, run `node src/orestes.js`. If it's all wired up correctly, you'll soon see the message `Orestes is online!`.
+Once `orestes-config.json` is looking good, run `node lib/orestes.js`. If it's all wired up correctly, you'll soon see the message `Orestes is online!`.
 
 Writing Data
 ------------

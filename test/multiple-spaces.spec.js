@@ -6,7 +6,7 @@ var expect = require('chai').expect;
 var test_utils = require('./orestes-test-utils');
 var sort_series = test_utils.sort_series;
 var series_from_points = test_utils.series_from_points;
-var Orestes = require('../src/orestes');
+var Orestes = require('../lib/orestes');
 
 var ES_MATCH_ALL = {
     match_all: {}
