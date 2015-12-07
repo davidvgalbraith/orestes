@@ -8,6 +8,7 @@
     "bluebird": "^2.9.30",
     "bluebird-retry": "^0.5.2",
     "body-parser": "^1.14.1",
+    "bubo": "git://github.com/juttle/bubo",
     "cassandra-native-driver": "^0.14.0",
     "chai": "^3.4.1",
     "express": "^4.13.3",
