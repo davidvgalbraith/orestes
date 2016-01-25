@@ -9,7 +9,7 @@ First, you need Orestes:
 
 `npm install orestes`
 
-Orestes depends on Cassandra 2.2.3 and Elasticsearch 2.0.0. You can [download](http://www.apache.org/dyn/closer.lua/cassandra/2.2.3/apache-cassandra-2.2.3-bin.tar.gz) them [yourself](https://www.elastic.co/downloads/elasticsearch) or run `sh scripts/download-backends.sh`. Then you can [run](https://wiki.apache.org/cassandra/RunningCassandra) them [yourself](https://www.elastic.co/guide/en/elasticsearch/guide/current/running-elasticsearch.html) or run `sh scripts/run-backends.sh` if you downloaded them using `download-backends.sh`.
+Orestes depends on Cassandra 2.2.4 and Elasticsearch 2.0.0. You can [download](http://www.apache.org/dyn/closer.lua/cassandra/2.2.4/apache-cassandra-2.2.4-bin.tar.gz) them [yourself](https://www.elastic.co/downloads/elasticsearch) or run `sh scripts/download-backends.sh`. Then you can [run](https://wiki.apache.org/cassandra/RunningCassandra) them [yourself](https://www.elastic.co/guide/en/elasticsearch/guide/current/running-elasticsearch.html) or run `sh scripts/run-backends.sh` if you downloaded them using `download-backends.sh`.
 
 Once the backends are running, Orestes needs to know the address and port to connect to them. Orestes reads this information from the "cassandra" and "elasticsearch" nested objects in `conf/orestes-config.json`. The provided defaults will connect to Cassandra and Elasticsearch processes running on localhost with their default ports, as they do if you download and run them with `download-backends.sh` and `run-backends.sh`. If you want to connect to a cluster elsewhere, you'll have to change the address and host in `orestes-config.json`.
 
