@@ -13,7 +13,7 @@ var verify_import = test_utils.verify_import;
 var select_distinct = test_utils.select_distinct;
 var build_attr_string = test_utils.build_attr_string;
 
-var Orestes = require('../lib/orestes');
+var Orestes = require('../lib');
 
 var msInDay = 1000 * 60 * 60 * 24;
 
