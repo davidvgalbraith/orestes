@@ -9,7 +9,7 @@ First, you need Orestes:
 
 `npm install orestes`
 
-Orestes depends on Cassandra 2.2.4 and Elasticsearch 2.0.0. You can [download](http://www.apache.org/dyn/closer.lua/cassandra/2.2.4/apache-cassandra-2.2.4-bin.tar.gz) them [yourself](https://www.elastic.co/downloads/elasticsearch) or run `sh scripts/download-backends.sh`. Then you can [run](https://wiki.apache.org/cassandra/RunningCassandra) them [yourself](https://www.elastic.co/guide/en/elasticsearch/guide/current/running-elasticsearch.html) or run `sh scripts/run-backends.sh` if you downloaded them using `download-backends.sh`.
+Orestes depends on Cassandra 2.2.5 and Elasticsearch 2.0.0. You can [download](http://apache.mirrors.tds.net/cassandra/2.2.5/apache-cassandra-2.2.5-bin.tar.gz) them [yourself](https://www.elastic.co/downloads/elasticsearch) or run `sh scripts/download-backends.sh`. Then you can [run](https://wiki.apache.org/cassandra/RunningCassandra) them [yourself](https://www.elastic.co/guide/en/elasticsearch/guide/current/running-elasticsearch.html) or run `sh scripts/run-backends.sh` if you downloaded them using `download-backends.sh`.
 
 Once the backends are running, Orestes needs to know the address and port to connect to them. Orestes reads this information from the "cassandra" and "elasticsearch" nested objects in `conf/orestes-config.json`. The provided defaults will connect to Cassandra and Elasticsearch processes running on localhost with their default ports, as they do if you download and run them with `download-backends.sh` and `run-backends.sh`. If you want to connect to a cluster elsewhere, you'll have to change the address and host in `orestes-config.json`.
 
@@ -27,7 +27,7 @@ curl -XPOST localhost:9668/write -H 'Content-Type: application/json' -d '[
 {"time":"2015-11-17T23:36:08.310Z","value":93,"name":"test_series","some_tag":"two"}
 ]'
 ```
-Under the hood, Orestes will split these points by "series". The series of a point is the key-value pairs of that point other than `time` and `value`. So the series in this data set are `{"name":"test_series","some_tag":"one"}` and `{"name":"test_series","some_tag":"two"}`. For each series, Orestes stores one document in Elasticsearch. Each series corresponds to a row in Cassandra that contains all the times and values in that series.
+Under the hood, Orestes will split these points by _series_. The series of a point is the key-value pairs of that point other than `time` and `value`. So the series in this data set are `{"name":"test_series","some_tag":"one"}` and `{"name":"test_series","some_tag":"two"}`. For each series, Orestes stores one document in Elasticsearch. Each series corresponds to a row in Cassandra that contains all the times and values in that series.
 
 The response from Orestes is an object with a key called `errors` mapping to an array of objects describing any points that failed to write. For instance, let's try to write a point with no time field:
 ```
