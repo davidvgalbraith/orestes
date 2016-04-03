@@ -1,16 +1,4 @@
-var Promise = require('bluebird');
-var retry = require('bluebird-retry');
-var _ = require('underscore');
-var expect = require('chai').expect;
-
 var test_utils = require('./orestes-test-utils');
-var sort_series = test_utils.sort_series;
-var series_from_points = test_utils.series_from_points;
-var Orestes = require('../lib');
-
-var ES_MATCH_ALL = {
-    match_all: {}
-};
 
 var msInDay = 1000 * 60 * 60 * 24;
 
@@ -45,7 +33,9 @@ describe('embedded Orestes API', function() {
     });
 
     after(function() {
-        return test_utils.stop_orestes();
+        return test_utils.stop_orestes().then(function() {
+            return test_utils.clear_spaces(['default', 'other']);
+        });
     });
 
     describe('another space', function() {

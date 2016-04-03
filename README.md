@@ -250,8 +250,6 @@ curl -XPOST localhost:9668/select_distinct -H 'Content-Type: application/json' -
 [{"some_tag":"one","name":"test_series"},{"some_tag":"two","name":"test_series"}]
 ```
 
-To run `select_distinct` queries on multiple keys, Elasticsearch needs to have the script `aggkey.groovy` from orestes/scripts copied into `elasticsearch-2.0.0/config/scripts`. This is handled by `download-backends.sh` if you chose that method of installation.
-
 Performance
 -----------
 Orestes comes with a handy script called `scripts/perf-test.js` that you can use to evaluate its performance. This script writes and reads a specified number of points with a specified format. You specify the number and format with some command line options:
