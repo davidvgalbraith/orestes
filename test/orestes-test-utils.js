@@ -95,7 +95,7 @@ function write(points, space) {
         json: points
     })
     .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
+        _assert_success(res, body);
         return body;
     });
 }
@@ -111,8 +111,7 @@ function read(query, space, start, end, options) {
         json : {
             query: query || ES_MATCH_ALL,
             start: start || 0,
-            end: end || Date.now(),
-            series_limit: options.series_limit
+            end: end || Date.now()
         }
     })
     .spread(function(res, body) {
@@ -128,23 +127,14 @@ function verify_import(points, space, query, expected) {
     return retry(function() {
         return read(query, space)
             .then(function(result) {
-                expect(sort_series(result.series)).deep.equal(expected);
+                var received = sort_series(result.series);
+                expect(received).deep.equal(expected);
             });
     });
 }
 
 function remove(space) {
-    var delete_url = BASE_URL + 'delete';
-    return request.postAsync({
-        url: delete_url,
-        json: {
-            space: space,
-            keep_days: 0
-        }
-    })
-    .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
-    });
+    return Orestes.remove({space: space, keep_days: -1});
 }
 
 function read_series(query) {
@@ -159,7 +149,7 @@ function read_series(query) {
         }
     })
     .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
+        _assert_success(res, body);
         return body;
     });
 }
@@ -175,7 +165,7 @@ function select_distinct(keys, query) {
         }
     })
     .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
+        _assert_success(res, body);
         return body;
     });
 }
@@ -194,7 +184,7 @@ function count(query, start, end) {
         }
     })
     .spread(function(res, body) {
-        expect(res.statusCode).equal(200);
+        _assert_success(res, body);
         return body;
     });
 }
@@ -226,6 +216,14 @@ function start_orestes(config) {
 
 function stop_orestes() {
     return Orestes.teardown();
+}
+
+function _assert_success(res, body) {
+    if (res.statusCode !== 200) {
+        var path = res && res.req && res.req.path;
+        throw new Error('received non-200 statusCode from ' + path +
+            '\n\tbody: ' + JSON.stringify(body));
+    }
 }
 
 module.exports = {

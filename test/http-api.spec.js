@@ -1,10 +1,6 @@
-var Promise = require('bluebird');
 var _ = require('underscore');
-var request = Promise.promisifyAll(require('request'));
 var expect = require('chai').expect;
 var oboe = require('oboe');
-
-var orestes_utils = require('../lib/orestes-utils');
 
 var test_utils = require('./orestes-test-utils');
 var sort_series = test_utils.sort_series;
@@ -12,8 +8,6 @@ var write = test_utils.write;
 var verify_import = test_utils.verify_import;
 var select_distinct = test_utils.select_distinct;
 var build_attr_string = test_utils.build_attr_string;
-
-var Orestes = require('../lib');
 
 var msInDay = 1000 * 60 * 60 * 24;
 
@@ -292,35 +286,6 @@ describe('Orestes', function() {
                     var received = _.sortBy(result, build_attr_string);
 
                     expect(received).deep.equal(expected);
-                });
-        });
-    });
-
-    describe('limits', function() {
-        var points = test_utils.generate_sample_data({
-            count: 1000,
-            tags: {
-                host: ['a', 'b', 'c'],
-                pop: ['d', 'e', 'f', 'g'],
-                bananas: ['one', 'two', 'three', 'four', 'five']
-            }
-        });
-
-        before(function() {
-            return write(points)
-                .then(function() {
-                    return verify_import(points);
-                });
-        });
-
-        after(function() {
-            return test_utils.remove('default');
-        });
-
-        it('errors if you try to read from more than series_limit series', function() {
-            return test_utils.read(null, 'default', 0, Date.now(), {series_limit: 10})
-                .then(function(res) {
-                    expect(res.error).equal('query matched more than 10 series');
                 });
         });
     });
