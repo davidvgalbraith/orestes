@@ -7,7 +7,7 @@ Getting started
 
 First, you need Orestes:
 
-`npm install orestes`
+`git clone https://github.com/davidvgalbraith/orestes.git; cd orestes; npm install`
 
 Orestes depends on Cassandra 2.2.5 and Elasticsearch 2.0.0. You can [download](http://apache.mirrors.tds.net/cassandra/2.2.5/apache-cassandra-2.2.5-bin.tar.gz) them [yourself](https://www.elastic.co/downloads/elasticsearch) or run `sh scripts/download-backends.sh`. Then you can [run](https://wiki.apache.org/cassandra/RunningCassandra) them [yourself](https://www.elastic.co/guide/en/elasticsearch/guide/current/running-elasticsearch.html) or run `sh scripts/run-backends.sh` if you downloaded them using `download-backends.sh`.
 
@@ -29,7 +29,7 @@ curl -XPOST localhost:9668/write -H 'Content-Type: application/json' -d '[
 ```
 Under the hood, Orestes will split these points by _series_. The series of a point is the key-value pairs of that point other than `time` and `value`. So the series in this data set are `{"name":"test_series","some_tag":"one"}` and `{"name":"test_series","some_tag":"two"}`. For each series, Orestes stores one document in Elasticsearch. Each series corresponds to a row in Cassandra that contains all the times and values in that series.
 
-The response from Orestes is an object with a key called `errors` mapping to an array of objects describing any points that failed to write. For instance, let's try to write a point with no time field:
+The response from Orestes is an object with a key called `errors` mapping to an array of objects describing any points that failed to write. For instance, let's try to write a point with no `time` field:
 ```
 curl -XPOST localhost:9668/write -H 'Content-Type: application/json' -d '[
 {"value":17,"name":"broken_point_no_time"}
@@ -48,7 +48,7 @@ Reading Data
 Orestes takes read requests via POSTs to the `/read` endpoint. The body of the POST should be an object defining the query. Possible keys for this object include:
 
 #### start ####
-The earliest timestamp to return points for, in UNIX milliseconds or ISO string format. If not specified, `start` defaults to UNIX 0 -- midnight on January 1, 1970.
+The earliest timestamp to return points for, in UNIX milliseconds or ISO string format. If not specified, `start` defaults to the UNIX epoch -- midnight on January 1, 1970.
 
 #### end ####
 The end of the query, in UNIX milliseconds or ISO string format. Points with exactly this timestamp will not be returned -- Orestes returns points inclusive of the start time but exclusive of the end time. If not specified, `end` defaults to the time Orestes receives the request.
@@ -99,7 +99,7 @@ curl -XPOST localhost:9668/read
     ]
 }
 ```
-There you can see the format of the response Orestes returns. The response has a key called "series" mapping to an array of objects representing the series that the query matched. Each one of these objects has a key called "tags", which consists of the key-value pairs defining the series, and a key called "points", which is an array of the data points in that series in the given time range. Each data point is represented as an array `[timestamp, value]`. There's one more key that is sometimes present -- that key is `error`. If the `error` key is present, it means that the query failed at some point. The response may also contain some results in the `series` key, because Orestes streams results over HTTP as soon as they are available. Any results in a response that also contains an `error` key should be considered partial.
+There you can see the format of the response Orestes returns. The response has a key called `series` mapping to an array of objects representing the series that the query matched. Each one of these objects has a key called `tags`, which consists of the key-value pairs defining the series, and a key called `points`, which is an array of the data points in that series in the given time range. Each data point is represented as an array `[timestamp, value]`. There's one more key that is sometimes present -- that key is `error`. If the `error` key is present, it means that the query failed at some point. The response may also contain some results in the `series` key, because Orestes streams results over HTTP as soon as they are available. Any results in a response that also contains an `error` key should be considered partial.
 
 Let's run a slightly more interesting query:
 
